@@ -60,6 +60,10 @@ namespace curl
         curl::set_option(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl::set_option(curl, CURLOPT_USERAGENT, curl::STRING_USER_AGENT);
         curl::set_option(curl, CURLOPT_CONNECTTIMEOUT, 5L);
+        // Stall guard: abort if a transfer moves < 30 B/s for 30s. Prevents a dead/stalled connection from
+        // hanging the whole app forever (the calls run synchronously on the main thread in places).
+        curl::set_option(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
+        curl::set_option(curl, CURLOPT_LOW_SPEED_TIME, 30L);
     }
 
     /// @brief Logged inline wrapper function for curl_easy_perform.
