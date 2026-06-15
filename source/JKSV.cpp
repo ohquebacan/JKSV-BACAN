@@ -237,7 +237,7 @@ void JKSV::setup_translation_info_strings()
     const char *author            = strings::get_by_name(strings::names::TRANSLATION, 1);
     m_showTranslationInfo         = std::char_traits<char>::compare(author, "NULL", 4) != 0; // This is whether or not to show.
     m_translationInfo             = stringutil::get_formatted_string(translationFormat, author);
-    m_buildString = stringutil::get_formatted_string("v. %04d-%02d-%02d OQB!", builddate::YEAR, builddate::MONTH, builddate::DAY);
+    m_buildString = stringutil::get_formatted_string("JKSV BACAN v2.0 OQB! (%04d-%02d-%02d)", builddate::YEAR, builddate::MONTH, builddate::DAY);
 }
 
 void JKSV::applet_mode_warning() noexcept
