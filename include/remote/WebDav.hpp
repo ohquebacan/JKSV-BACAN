@@ -15,6 +15,9 @@ namespace remote
             /// @brief Re-runs the PROPFIND from the root and rebuilds the in-memory list.
             bool reload() override;
 
+            /// @brief Re-runs a PROPFIND for one title folder and replaces just its children in the list.
+            bool reload_folder(std::string_view name) override;
+
             /// @brief Creates a new directory on the WebDav server.
             /// @param name Name of the directory to create.
             bool create_directory(std::string_view name) override;

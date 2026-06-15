@@ -15,6 +15,9 @@ namespace remote
             /// @brief Re-fetches the Drive listing into the in-memory list.
             bool reload() override;
 
+            /// @brief Drive's full listing is a single cheap request, so just reload everything.
+            bool reload_folder(std::string_view name) override;
+
             /// @brief Creates a directory on Google Drive.
             /// @param name Name of the directory to create.
             bool create_directory(std::string_view name) override;

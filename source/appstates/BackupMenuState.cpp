@@ -306,6 +306,8 @@ void BackupMenuState::initialize_remote_storage()
     const bool supportsUtf8            = remote->supports_utf8();
     const std::string_view remoteTitle = supportsUtf8 ? m_titleInfo->get_title() : m_titleInfo->get_path_safe_title();
     const bool remoteDirExists         = remote->directory_exists(remoteTitle);
+    // Re-query the server for this game's folder so backups another console deleted don't linger as phantoms.
+    if (remoteDirExists) { remote->reload_folder(remoteTitle); }
     const bool remoteDirCreated        = !remoteDirExists && remote->create_directory(remoteTitle);
     if (!remoteDirExists && !remoteDirCreated) { return; }
 
