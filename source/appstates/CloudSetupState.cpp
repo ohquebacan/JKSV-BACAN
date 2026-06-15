@@ -7,6 +7,7 @@
 #include "config/config.hpp"
 #include "data/data.hpp"
 #include "fslib.hpp"
+#include "tasks/backup.hpp"
 #include "tasks/mainmenu.hpp"
 #include "graphics/colors.hpp"
 #include "graphics/screen.hpp"
@@ -32,6 +33,7 @@ namespace
         GOOGLE_DRIVE_GUIDE,
         VIEW_CONFIG,
         UPLOAD_FAVORITES,
+        DOWNLOAD_FAVORITES,
         RETENTION
     };
 } // namespace
@@ -66,6 +68,7 @@ void CloudSetupState::update()
             case GOOGLE_DRIVE_GUIDE: CloudSetupState::show_google_drive_guide(); break;
             case VIEW_CONFIG:        CloudSetupState::show_current_config(); break;
             case UPLOAD_FAVORITES:   CloudSetupState::upload_favorites(); break;
+            case DOWNLOAD_FAVORITES: CloudSetupState::download_favorites(); break;
             case RETENTION:          CloudSetupState::cycle_retention(); break;
         }
     }
@@ -101,6 +104,7 @@ void CloudSetupState::initialize_menu()
     m_menu->add_option("Google Drive (guia)");
     m_menu->add_option("Ver / editar configuracion actual");
     m_menu->add_option("Subir favoritos a la nube");
+    m_menu->add_option("Bajar favoritos de la nube");
     m_menu->add_option(""); // Retention row; filled by update_retention_label().
     CloudSetupState::update_retention_label();
 }
@@ -119,6 +123,24 @@ void CloudSetupState::upload_favorites()
 
     const char *query = "Subir la partida actual de tus juegos favoritos (corazon) a la nube?";
     ConfirmProgress::create_push_fade(query, false, tasks::mainmenu::upload_favorites_remote, nullptr, data);
+}
+
+void CloudSetupState::download_favorites()
+{
+    remote::Storage *remote = remote::get_remote_storage();
+    if (!remote)
+    {
+        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, "No hay nube configurada.");
+        return;
+    }
+
+    auto data = std::make_shared<MainMenuState::DataStruct>();
+    data::get_users(data->userList);
+
+    // Hold-to-confirm: this OVERWRITES local saves (a PRE-SYNC local backup is made first for safety).
+    const char *query = "SOBRESCRIBIR partidas locales de tus favoritos con la version de la nube? "
+                        "Se hace un backup local PRE-SYNC antes. Se salta si tu local es mas nuevo.";
+    ConfirmProgress::create_push_fade(query, true, tasks::backup::download_favorites_remote, nullptr, data);
 }
 
 void CloudSetupState::cycle_retention()

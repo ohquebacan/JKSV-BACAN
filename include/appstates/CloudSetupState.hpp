@@ -57,6 +57,9 @@ class CloudSetupState final : public BaseState
         /// @brief Confirms and uploads the current save of every favorited game to the remote.
         void upload_favorites();
 
+        /// @brief Confirms and restores the newest cloud backup of every favorited game (overwrites local saves).
+        void download_favorites();
+
         /// @brief Cycles the backup-retention limit (Off -> 5 -> 10 -> 20) and saves it.
         void cycle_retention();
 

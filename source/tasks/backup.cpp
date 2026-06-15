@@ -1,6 +1,8 @@
 #include "tasks/backup.hpp"
 
+#include "appstates/MainMenuState.hpp"
 #include "config/config.hpp"
+#include "data/data.hpp"
 #include "error.hpp"
 #include "fs/fs.hpp"
 #include "logging/logger.hpp"
@@ -540,6 +542,150 @@ void tasks::backup::restore_backup_remote(sys::threadpool::JobData taskData)
     }
 
     spawningState->save_data_written();
+    task->complete();
+}
+
+void tasks::backup::download_favorites_remote(sys::threadpool::JobData taskData)
+{
+    static constexpr const char *DOWNLOAD_PATH = "sdmc:/jksv_download.zip";
+
+    auto castData = std::static_pointer_cast<MainMenuState::DataStruct>(taskData);
+
+    sys::ProgressTask *task = static_cast<sys::ProgressTask *>(castData->task);
+    if (error::is_null(task)) { return; }
+
+    remote::Storage *remote = remote::get_remote_storage();
+    if (error::is_null(remote)) { TASK_FINISH_RETURN(task); }
+
+    int restored = 0;
+    int skipped  = 0;
+
+    // Reused per game. No spawning state on purpose: the helpers we call must not dereference it.
+    auto data           = std::make_shared<BackupMenuState::DataStruct>();
+    data->task          = task;
+    data->killTask      = false;
+    data->spawningState = nullptr;
+
+    const data::UserList &userList = castData->userList;
+    for (data::User *user : userList)
+    {
+        if (user->get_account_save_type() == FsSaveDataType_System) { continue; }
+
+        const int64_t titleCount = user->get_total_data_entries();
+        for (int64_t i = 0; i < titleCount; i++)
+        {
+            const FsSaveDataInfo *saveInfo = user->get_save_info_at(i);
+            if (error::is_null(saveInfo)) { continue; }
+
+            // Favorites only.
+            const uint64_t applicationID = saveInfo->application_id;
+            if (!config::is_favorite(applicationID)) { continue; }
+
+            data::TitleInfo *titleInfo = data::get_title_info_by_id(applicationID);
+            if (error::is_null(titleInfo)) { continue; }
+
+            // Resolve this game's remote folder with a fresh server query.
+            remote->return_to_root();
+            const std::string_view remoteTitle =
+                remote->supports_utf8() ? titleInfo->get_title() : titleInfo->get_path_safe_title();
+            if (!remote->directory_exists(remoteTitle)) { ++skipped; continue; }
+            remote->reload_folder(remoteTitle);
+
+            remote::Item *folder = remote->get_directory_by_name(remoteTitle);
+            if (!folder) { ++skipped; continue; }
+            remote->change_directory(folder);
+
+            // Pick the newest cloud backup by the date in its name.
+            remote::Storage::DirectoryListing listing;
+            remote->get_directory_listing(listing);
+            remote::Item *latest = nullptr;
+            std::string latestKey;
+            for (remote::Item *item : listing)
+            {
+                if (item->is_directory()) { continue; }
+                const std::string key = retention_sort_key(item->get_name());
+                if (!latest || key > latestKey)
+                {
+                    latest    = item;
+                    latestKey = key;
+                }
+            }
+            if (!latest) { ++skipped; continue; } // no cloud backup for this game
+
+            // Safety: don't downgrade. Skip if a local backup is already newer than the cloud one.
+            const fslib::Path localDir{config::get_working_directory() / titleInfo->get_path_safe_title()};
+            {
+                fslib::Directory localList{localDir, false};
+                std::string localLatest;
+                if (localList.is_open())
+                {
+                    const int64_t localCount = localList.get_count();
+                    for (int64_t j = 0; j < localCount; j++)
+                    {
+                        const std::string key = retention_sort_key(localList[j].get_filename());
+                        if (key > localLatest) { localLatest = key; }
+                    }
+                }
+                if (!localLatest.empty() && localLatest >= latestKey) { ++skipped; continue; }
+            }
+
+            data->user      = user;
+            data->titleInfo = titleInfo;
+            data->saveInfo  = saveInfo;
+
+            // 1) Forced local "PRE-SYNC" safety backup of the current save (recoverable if the restore goes wrong).
+            {
+                if (!fslib::directory_exists(localDir)) { error::fslib(fslib::create_directories_recursively(localDir)); }
+                const std::string dateString = stringutil::get_date_string();
+                std::string safetyName       = stringutil::get_formatted_string("PRE-SYNC - %s.zip", dateString.c_str());
+                data->path                   = localDir / safetyName;
+                tasks::backup::create_new_backup_local(data);
+            }
+
+            // 2) Download the newest cloud backup.
+            {
+                const char *statusFormat = strings::get_by_name(strings::names::IO_STATUSES, 4);
+                std::string status       = stringutil::get_formatted_string(statusFormat, titleInfo->get_title());
+                task->set_status(status);
+            }
+            const fslib::Path tempPath{DOWNLOAD_PATH};
+            if (!remote->download_file(latest, tempPath, task)) { ++skipped; continue; }
+
+            fs::MiniUnzip backup{tempPath};
+            if (!backup.is_open())
+            {
+                error::fslib(fslib::delete_file(tempPath));
+                ++skipped;
+                continue;
+            }
+
+            // 3) Wipe the live save and extract the cloud backup into it.
+            {
+                auto scopedMount = create_scoped_mount(saveInfo);
+                error::fslib(fslib::delete_directory_recursively(fs::DEFAULT_SAVE_ROOT));
+                error::fslib(fslib::commit_data_to_file_system(fs::DEFAULT_SAVE_MOUNT));
+            }
+            read_and_process_meta(backup, data, task);
+            {
+                FsSaveDataExtraData extraData{};
+                const bool readExtra      = fs::read_save_extra_data(saveInfo, extraData);
+                const uint8_t saveType    = user->get_account_save_type();
+                const int64_t journalSize = readExtra ? extraData.journal_size : titleInfo->get_journal_size(saveType);
+
+                auto scopedMount = create_scoped_mount(saveInfo);
+                fs::copy_zip_to_directory(backup, fs::DEFAULT_SAVE_ROOT, journalSize, task);
+            }
+            backup.close();
+            error::fslib(fslib::delete_file(tempPath));
+            ++restored;
+        }
+    }
+
+    remote->return_to_root();
+
+    std::string report = stringutil::get_formatted_string("Favoritos bajados: %d  -  saltados: %d", restored, skipped);
+    ui::PopMessageManager::push_message(POP_TICKS, report);
+
     task->complete();
 }
 
