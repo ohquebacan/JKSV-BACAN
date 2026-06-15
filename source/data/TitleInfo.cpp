@@ -119,7 +119,11 @@ const NsApplicationControlData *data::TitleInfo::get_control_data() const noexce
 
 bool data::TitleInfo::has_control_data() const noexcept { return m_hasData; }
 
-bool data::TitleInfo::name_is_broken() const noexcept { return m_nameBroken; }
+bool data::TitleInfo::name_is_broken() const noexcept
+{
+    // Once the user has assigned a custom folder name, the title is no longer "broken" for our purposes.
+    return m_nameBroken && !config::has_custom_path(m_applicationID);
+}
 
 const char *data::TitleInfo::get_title() const noexcept { return m_entry->name; }
 
