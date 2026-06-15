@@ -30,6 +30,12 @@ namespace remote
             /// @return True on success, false if the server request failed.
             virtual bool reload() = 0;
 
+            /// @brief Re-fetches just one root-level folder's contents from the server (lighter than reload()),
+            /// so a game's cloud backups stay accurate when another device added/removed them.
+            /// @param name Name of the per-title folder to refresh.
+            /// @return True if the folder was found and refreshed.
+            virtual bool reload_folder(std::string_view name) = 0;
+
             // Directory functions.
             /// @brief Returns whether or not a directory with name exists within the current parent.
             /// @param name Name of the directory to search for.

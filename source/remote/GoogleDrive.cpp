@@ -87,6 +87,8 @@ bool remote::GoogleDrive::reload()
     return GoogleDrive::request_listing();
 }
 
+bool remote::GoogleDrive::reload_folder(std::string_view) { return GoogleDrive::reload(); }
+
 bool remote::GoogleDrive::create_directory(std::string_view name)
 {
     if (!GoogleDrive::token_is_valid() && !GoogleDrive::refresh_token()) { return false; }

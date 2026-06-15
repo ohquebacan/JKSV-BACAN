@@ -9,6 +9,7 @@
 #include "stringutil.hpp"
 #include "ui/PopMessageManager.hpp"
 
+#include <algorithm>
 #include <tinyxml2.h>
 
 // Declarations here. Definitions at bottom.
@@ -94,6 +95,33 @@ bool remote::WebDav::reload()
     const bool propFind     = WebDav::prop_find(url, xml);
     const bool xmlProcessed = propFind && WebDav::process_listing(xml);
     return propFind && xmlProcessed;
+}
+
+bool remote::WebDav::reload_folder(std::string_view name)
+{
+    // Find this title's folder at the root.
+    auto is_target = [&](const remote::Item &item)
+    { return item.is_directory() && item.get_parent_id() == m_root && item.get_name() == name; };
+
+    auto findDir = std::find_if(m_list.begin(), m_list.end(), is_target);
+    if (findDir == m_list.end()) { return false; }
+
+    // Copy the id before mutating the list (the iterator/pointer won't survive the erase).
+    const std::string folderId{findDir->get_id()};
+
+    // Drop the folder's current children; we're about to re-fetch them.
+    m_list.erase(std::remove_if(m_list.begin(),
+                                m_list.end(),
+                                [&](const remote::Item &item) { return item.get_parent_id() == folderId; }),
+                 m_list.end());
+
+    // Re-PROPFIND just this folder and re-add its children.
+    remote::URL url{m_origin};
+    url.append_path(folderId).append_slash();
+
+    std::string xml{};
+    const bool propFind = WebDav::prop_find(url, xml);
+    return propFind && WebDav::process_listing(xml);
 }
 
 bool remote::WebDav::create_directory(std::string_view name)
