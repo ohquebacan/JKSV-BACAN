@@ -59,12 +59,15 @@ void ui::TitleTile::render(sdl::SharedTexture &target, int x, int y)
     if (m_isFavorite) { sdl::text::render(target, renderX + 2, renderY + 2, 28, sdl::text::NO_WRAP, colors::PINK, HEART_CHAR); }
     if (m_hasCloudBackup)
     {
-        // Small cyan badge in the top-right corner = this game has a backup on the remote storage.
-        const int badge = width / 5;
-        const int badgeX = renderX + width - badge - 4;
-        const int badgeY = renderY + 4;
-        sdl::render_rect_fill(target, badgeX - 2, badgeY - 2, badge + 4, badge + 4, colors::BLACK);
-        sdl::render_rect_fill(target, badgeX, badgeY, badge, badge, colors::BLUE_GREEN);
+        // Cloud icon in the top-right corner = this game has a backup on the remote storage.
+        if (!sm_cloudIcon) { sm_cloudIcon = sdl::TextureManager::load("cloudBadge", "romfs:/Textures/CloudBadge.png"); }
+        if (sm_cloudIcon)
+        {
+            const int badge  = width / 4;
+            const int badgeX = renderX + width - badge - 4;
+            const int badgeY = renderY + 4;
+            sm_cloudIcon->render_stretched(target, badgeX, badgeY, badge, badge);
+        }
     }
 }
 

@@ -49,5 +49,8 @@ namespace ui
 
             /// @brief Title's icon texture.
             sdl::SharedTexture m_icon{};
+
+            /// @brief Shared cloud-badge texture, loaded once and reused by every tile.
+            static inline sdl::SharedTexture sm_cloudIcon{};
     };
 } // namespace ui
