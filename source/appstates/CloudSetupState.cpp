@@ -37,6 +37,7 @@ namespace
         UPLOAD_FAVORITES,
         DOWNLOAD_FAVORITES,
         RESTORE_ALL,
+        SMART_SYNC_TOGGLE,
         RETENTION
     };
 } // namespace
@@ -74,6 +75,7 @@ void CloudSetupState::update()
             case UPLOAD_FAVORITES:   CloudSetupState::upload_favorites(); break;
             case DOWNLOAD_FAVORITES: CloudSetupState::download_favorites(); break;
             case RESTORE_ALL:        CloudSetupState::restore_all_from_cloud(); break;
+            case SMART_SYNC_TOGGLE:  CloudSetupState::cycle_smart_sync(); break;
             case RETENTION:          CloudSetupState::cycle_retention(); break;
         }
     }
@@ -112,8 +114,25 @@ void CloudSetupState::initialize_menu()
     m_menu->add_option("Subir favoritos a la nube");
     m_menu->add_option("Bajar favoritos de la nube");
     m_menu->add_option("Restaurar TODO de la nube (crea saves)");
+    m_menu->add_option(""); // Smart-sync row; filled by update_smart_label().
     m_menu->add_option(""); // Retention row; filled by update_retention_label().
+    CloudSetupState::update_smart_label();
     CloudSetupState::update_retention_label();
+}
+
+void CloudSetupState::cycle_smart_sync()
+{
+    const uint8_t value = config::get_by_key(config::keys::SMART_SYNC) ? 0 : 1;
+    config::set_by_key(config::keys::SMART_SYNC, value);
+    config::save();
+    CloudSetupState::update_smart_label();
+}
+
+void CloudSetupState::update_smart_label()
+{
+    const bool on = config::get_by_key(config::keys::SMART_SYNC) != 0;
+    m_menu->edit_option(SMART_SYNC_TOGGLE,
+                        on ? "Smart-sync (protege el save mas nuevo): ON" : "Smart-sync (protege el save mas nuevo): OFF");
 }
 
 void CloudSetupState::upload_favorites()

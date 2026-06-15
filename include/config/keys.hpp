@@ -32,4 +32,7 @@ namespace config::keys
     inline constexpr std::string_view BLACKLIST               = "BlackList";
     /// @brief How many backups to keep per game (0 = unlimited). Older ones are pruned after a new backup.
     inline constexpr std::string_view BACKUP_RETENTION        = "BackupRetention";
+    /// @brief Smart sync: when on, a cloud restore skips a game whose local save is genuinely newer (by save
+    /// timestamp, not backup date), protecting real progress.
+    inline constexpr std::string_view SMART_SYNC              = "SmartSync";
 }

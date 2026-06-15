@@ -545,6 +545,29 @@ void tasks::backup::restore_backup_remote(sys::threadpool::JobData taskData)
     task->complete();
 }
 
+// Smart sync: returns true if the cloud backup should NOT overwrite the local save, because the local save is
+// genuinely newer (by the save's real timestamp stored in the backup meta, not the backup's file date). This
+// protects real progress from being clobbered by a fresh backup of an older save. Off (config) => never skips.
+static bool smart_skip_restore(const FsSaveDataInfo *saveInfo, fs::MiniUnzip &backupZip)
+{
+    if (config::get_by_key(config::keys::SMART_SYNC) == 0) { return false; }
+    if (saveInfo == nullptr) { return false; }
+
+    // Live save's last-commit (gameplay) timestamp.
+    FsSaveDataExtraData liveExtra{};
+    if (!fs::read_save_extra_data(saveInfo, liveExtra) || liveExtra.timestamp == 0) { return false; }
+
+    // Cloud backup's stored save timestamp (read from its meta; locate/read won't disturb the later restore,
+    // since copy_zip_to_directory resets to the first file).
+    if (!backupZip.locate_file(fs::NAME_SAVE_META)) { return false; }
+    fs::SaveMetaData meta{};
+    backupZip.read(&meta, fs::SIZE_SAVE_META);
+    if (meta.timestamp == 0) { return false; }
+
+    // Skip the overwrite only when the cloud save is NOT newer than the live one.
+    return meta.timestamp <= liveExtra.timestamp;
+}
+
 void tasks::backup::download_favorites_remote(sys::threadpool::JobData taskData)
 {
     static constexpr const char *DOWNLOAD_PATH = "sdmc:/jksv_download.zip";
@@ -612,37 +635,13 @@ void tasks::backup::download_favorites_remote(sys::threadpool::JobData taskData)
             }
             if (!latest) { ++skipped; continue; } // no cloud backup for this game
 
-            // Safety: don't downgrade. Skip if a local backup is already newer than the cloud one.
             const fslib::Path localDir{config::get_working_directory() / titleInfo->get_path_safe_title()};
-            {
-                fslib::Directory localList{localDir, false};
-                std::string localLatest;
-                if (localList.is_open())
-                {
-                    const int64_t localCount = localList.get_count();
-                    for (int64_t j = 0; j < localCount; j++)
-                    {
-                        const std::string key = retention_sort_key(localList[j].get_filename());
-                        if (key > localLatest) { localLatest = key; }
-                    }
-                }
-                if (!localLatest.empty() && localLatest >= latestKey) { ++skipped; continue; }
-            }
 
             data->user      = user;
             data->titleInfo = titleInfo;
             data->saveInfo  = saveInfo;
 
-            // 1) Forced local "PRE-SYNC" safety backup of the current save (recoverable if the restore goes wrong).
-            {
-                if (!fslib::directory_exists(localDir)) { error::fslib(fslib::create_directories_recursively(localDir)); }
-                const std::string dateString = stringutil::get_date_string();
-                std::string safetyName       = stringutil::get_formatted_string("PRE-SYNC - %s.zip", dateString.c_str());
-                data->path                   = localDir / safetyName;
-                tasks::backup::create_new_backup_local(data);
-            }
-
-            // 2) Download the newest cloud backup.
+            // 1) Download the newest cloud backup first (we need its meta to decide whether to restore).
             {
                 const char *statusFormat = strings::get_by_name(strings::names::IO_STATUSES, 4);
                 std::string status       = stringutil::get_formatted_string(statusFormat, titleInfo->get_title());
@@ -659,7 +658,25 @@ void tasks::backup::download_favorites_remote(sys::threadpool::JobData taskData)
                 continue;
             }
 
-            // 3) Wipe the live save and extract the cloud backup into it.
+            // 2) Smart sync: skip if the local save is genuinely newer (protects real progress).
+            if (smart_skip_restore(saveInfo, backup))
+            {
+                backup.close();
+                error::fslib(fslib::delete_file(tempPath));
+                ++skipped;
+                continue;
+            }
+
+            // 3) Forced local "PRE-SYNC" safety backup of the current save (recoverable if the restore goes wrong).
+            {
+                if (!fslib::directory_exists(localDir)) { error::fslib(fslib::create_directories_recursively(localDir)); }
+                const std::string dateString = stringutil::get_date_string();
+                std::string safetyName       = stringutil::get_formatted_string("PRE-SYNC - %s.zip", dateString.c_str());
+                data->path                   = localDir / safetyName;
+                tasks::backup::create_new_backup_local(data);
+            }
+
+            // 4) Wipe the live save and extract the cloud backup into it.
             {
                 auto scopedMount = create_scoped_mount(saveInfo);
                 error::fslib(fslib::delete_directory_recursively(fs::DEFAULT_SAVE_ROOT));
@@ -689,9 +706,10 @@ void tasks::backup::download_favorites_remote(sys::threadpool::JobData taskData)
     task->complete();
 }
 
-// Shared restore core for the cloud sweep: PRE-SYNC safety backup, download the item, wipe the live save and
-// extract the cloud backup into it. data must have a valid user/titleInfo/saveInfo/task (no spawning state).
-static bool restore_cloud_item_into_save(BackupMenuState::TaskData data, remote::Item *latest)
+// Shared restore core for the cloud sweep: download the item, optionally protect a newer local save, make a
+// PRE-SYNC safety backup, wipe the live save and extract. data must have a valid user/titleInfo/saveInfo/task
+// (no spawning state). applySmartCheck=false forces the restore (e.g. for a save container just created).
+static bool restore_cloud_item_into_save(BackupMenuState::TaskData data, remote::Item *latest, bool applySmartCheck)
 {
     static constexpr const char *DOWNLOAD_PATH = "sdmc:/jksv_download.zip";
 
@@ -705,17 +723,7 @@ static bool restore_cloud_item_into_save(BackupMenuState::TaskData data, remote:
 
     const fslib::Path localDir{config::get_working_directory() / titleInfo->get_path_safe_title()};
 
-    // 1) Forced PRE-SYNC local safety backup of the current save (recoverable if the restore goes wrong).
-    {
-        if (!fslib::directory_exists(localDir)) { error::fslib(fslib::create_directories_recursively(localDir)); }
-        const std::string dateString = stringutil::get_date_string();
-        std::string safetyName       = stringutil::get_formatted_string("PRE-SYNC - %s.zip", dateString.c_str());
-        data->path                   = localDir / safetyName;
-        data->killTask               = false;
-        tasks::backup::create_new_backup_local(data);
-    }
-
-    // 2) Download the cloud backup.
+    // 1) Download the cloud backup first (we need its meta to decide).
     {
         const char *statusFormat = strings::get_by_name(strings::names::IO_STATUSES, 4);
         std::string status       = stringutil::get_formatted_string(statusFormat, titleInfo->get_title());
@@ -731,7 +739,25 @@ static bool restore_cloud_item_into_save(BackupMenuState::TaskData data, remote:
         return false;
     }
 
-    // 3) Wipe the live save and extract the cloud backup into it.
+    // 2) Smart sync: skip if the existing local save is genuinely newer (not for freshly-created containers).
+    if (applySmartCheck && smart_skip_restore(saveInfo, backup))
+    {
+        backup.close();
+        error::fslib(fslib::delete_file(tempPath));
+        return false;
+    }
+
+    // 3) Forced PRE-SYNC local safety backup of the current save (recoverable if the restore goes wrong).
+    {
+        if (!fslib::directory_exists(localDir)) { error::fslib(fslib::create_directories_recursively(localDir)); }
+        const std::string dateString = stringutil::get_date_string();
+        std::string safetyName       = stringutil::get_formatted_string("PRE-SYNC - %s.zip", dateString.c_str());
+        data->path                   = localDir / safetyName;
+        data->killTask               = false;
+        tasks::backup::create_new_backup_local(data);
+    }
+
+    // 4) Wipe the live save and extract the cloud backup into it.
     {
         auto scopedMount = create_scoped_mount(saveInfo);
         error::fslib(fslib::delete_directory_recursively(fs::DEFAULT_SAVE_ROOT));
@@ -824,6 +850,7 @@ void tasks::backup::restore_all_from_cloud(sys::threadpool::JobData taskData)
         const uint64_t applicationID = titleInfo->get_application_id();
 
         // Ensure a save container exists for this user; create it if the game was never launched.
+        bool justCreated         = false;
         FsSaveDataInfo *saveInfo = targetUser->get_save_info_by_id(applicationID);
         if (saveInfo == nullptr)
         {
@@ -832,6 +859,7 @@ void tasks::backup::restore_all_from_cloud(sys::threadpool::JobData taskData)
             saveInfo = targetUser->get_save_info_by_id(applicationID);
             if (saveInfo == nullptr) { ++otherSkips; continue; }
             ++createdSaves;
+            justCreated = true;
         }
 
         // Newest cloud backup in this folder.
@@ -855,7 +883,8 @@ void tasks::backup::restore_all_from_cloud(sys::threadpool::JobData taskData)
 
         data->titleInfo = titleInfo;
         data->saveInfo  = saveInfo;
-        if (restore_cloud_item_into_save(data, latest)) { ++restored; }
+        // A just-created (empty) container has no real progress to protect: force the restore.
+        if (restore_cloud_item_into_save(data, latest, !justCreated)) { ++restored; }
         else { ++otherSkips; }
     }
 
