@@ -34,6 +34,7 @@ namespace
         VIEW_CONFIG,
         UPLOAD_FAVORITES,
         DOWNLOAD_FAVORITES,
+        RESTORE_ALL,
         RETENTION
     };
 } // namespace
@@ -69,6 +70,7 @@ void CloudSetupState::update()
             case VIEW_CONFIG:        CloudSetupState::show_current_config(); break;
             case UPLOAD_FAVORITES:   CloudSetupState::upload_favorites(); break;
             case DOWNLOAD_FAVORITES: CloudSetupState::download_favorites(); break;
+            case RESTORE_ALL:        CloudSetupState::restore_all_from_cloud(); break;
             case RETENTION:          CloudSetupState::cycle_retention(); break;
         }
     }
@@ -105,6 +107,7 @@ void CloudSetupState::initialize_menu()
     m_menu->add_option("Ver / editar configuracion actual");
     m_menu->add_option("Subir favoritos a la nube");
     m_menu->add_option("Bajar favoritos de la nube");
+    m_menu->add_option("Restaurar TODO de la nube (crea saves)");
     m_menu->add_option(""); // Retention row; filled by update_retention_label().
     CloudSetupState::update_retention_label();
 }
@@ -141,6 +144,23 @@ void CloudSetupState::download_favorites()
     const char *query = "SOBRESCRIBIR partidas locales de tus favoritos con la version de la nube? "
                         "Se hace un backup local PRE-SYNC antes. Se salta si tu local es mas nuevo.";
     ConfirmProgress::create_push_fade(query, true, tasks::backup::download_favorites_remote, nullptr, data);
+}
+
+void CloudSetupState::restore_all_from_cloud()
+{
+    remote::Storage *remote = remote::get_remote_storage();
+    if (!remote)
+    {
+        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, "No hay nube configurada.");
+        return;
+    }
+
+    auto data = std::make_shared<MainMenuState::DataStruct>();
+
+    // Hold-to-confirm: creates save containers for games never launched and OVERWRITES existing saves.
+    const char *query = "Restaurar TODA tu nube en esta consola? Crea las partidas de juegos instalados que nunca "
+                        "abriste y SOBRESCRIBE las existentes (con backup PRE-SYNC). Juegos no instalados se omiten.";
+    ConfirmProgress::create_push_fade(query, true, tasks::backup::restore_all_from_cloud, nullptr, data);
 }
 
 void CloudSetupState::cycle_retention()
