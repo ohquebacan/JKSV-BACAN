@@ -30,4 +30,7 @@ namespace tasks::backup
 
     /// @brief Re-fetches the remote listing so backups made on other devices appear without restarting.
     void reload_remote(sys::threadpool::JobData taskData);
+
+    /// @brief Downloads and restores the newest cloud backup for every favorited game (with PRE-SYNC safety backup).
+    void download_favorites_remote(sys::threadpool::JobData taskData);
 }
