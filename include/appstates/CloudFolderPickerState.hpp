@@ -44,4 +44,10 @@ class CloudFolderPickerState final : public BaseState
 
         void build_list();
         void associate(int index);
+
+        /// @brief Prompts for a new name (creates the cloud folder on reinitialize) and associates it.
+        void create_new();
+
+        /// @brief Applies a folder name as this game's custom path and refreshes.
+        void apply_name(const char *name);
 };

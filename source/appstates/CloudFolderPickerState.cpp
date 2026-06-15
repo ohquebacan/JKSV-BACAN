@@ -5,11 +5,13 @@
 #include "graphics/colors.hpp"
 #include "graphics/screen.hpp"
 #include "input.hpp"
+#include "keyboard/keyboard.hpp"
 #include "remote/remote.hpp"
 #include "strings/strings.hpp"
 #include "stringutil.hpp"
 #include "ui/PopMessageManager.hpp"
 
+#include <array>
 #include <string>
 
 namespace
@@ -38,9 +40,11 @@ void CloudFolderPickerState::update()
     m_menu->update(hasFocus);
     m_controlGuide->update(hasFocus);
 
-    if (input::button_pressed(HidNpadButton_A) && !m_folderNames.empty())
+    if (input::button_pressed(HidNpadButton_A))
     {
-        CloudFolderPickerState::associate(m_menu->get_selected());
+        const int selected = m_menu->get_selected();
+        if (selected == 0) { CloudFolderPickerState::create_new(); }       // "Crear nueva"
+        else { CloudFolderPickerState::associate(selected - 1); }          // pick an existing folder
     }
     else if (input::button_pressed(HidNpadButton_B)) { BaseState::deactivate(); }
 }
@@ -71,7 +75,10 @@ void CloudFolderPickerState::build_list()
         return;
     }
 
-    // In-memory listing of the cloud's root-level folders (no network on the main thread).
+    // First option always lets the user type a brand-new name.
+    m_menu->add_option("[ + Crear nueva (escribir nombre) ]");
+
+    // Then the cloud's existing root-level folders (in-memory listing; no network on the main thread).
     remote->return_to_root();
     remote::Storage::DirectoryListing rootItems;
     remote->get_directory_listing(rootItems);
@@ -82,23 +89,42 @@ void CloudFolderPickerState::build_list()
         m_folderNames.emplace_back(item->get_name());
         m_menu->add_option(std::string(item->get_name()));
     }
-
-    if (m_folderNames.empty()) { m_menu->add_option("No hay carpetas de juegos en la nube todavia."); }
 }
 
 void CloudFolderPickerState::associate(int index)
 {
     if (index < 0 || index >= static_cast<int>(m_folderNames.size())) { return; }
+    CloudFolderPickerState::apply_name(m_folderNames[index].c_str());
+}
 
-    const std::string &folderName = m_folderNames[index];
+void CloudFolderPickerState::create_new()
+{
+    std::array<char, 0x200> buffer = {0};
+    if (!keyboard::get_input(SwkbdType_Normal, "", "Nombre de la carpeta para este juego", buffer.data(), buffer.size() - 1))
+    {
+        return;
+    }
 
-    // Point this game at the chosen cloud folder (also used for the local folder).
-    m_titleInfo->set_path_safe_title(folderName.c_str());
-    config::add_custom_path(m_titleInfo->get_application_id(), folderName);
+    std::array<char, 0x200> safe = {0};
+    const bool ok                = stringutil::sanitize_string_for_path(buffer.data(), safe.data(), safe.size());
+    if (!ok || safe[0] == '\0')
+    {
+        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, "Nombre invalido.");
+        return;
+    }
+    CloudFolderPickerState::apply_name(safe.data());
+}
+
+void CloudFolderPickerState::apply_name(const char *name)
+{
+    // Point this game at the folder name (used for local + cloud). reinitialize_remote() creates the cloud
+    // folder if it doesn't exist yet, so "create new" and "pick existing" both work.
+    m_titleInfo->set_path_safe_title(name);
+    config::add_custom_path(m_titleInfo->get_application_id(), name);
     config::save();
 
     ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS,
-                                        stringutil::get_formatted_string("Asociado a: %s", folderName.c_str()));
+                                        stringutil::get_formatted_string("Asociado a: %s", name));
 
     if (m_spawning) { m_spawning->reinitialize_remote(); }
     BaseState::deactivate();
