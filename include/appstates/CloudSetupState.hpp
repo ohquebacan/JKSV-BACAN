@@ -54,6 +54,9 @@ class CloudSetupState final : public BaseState
         /// @brief Opens the form loaded with the current webdav.json (or a pop if there is none).
         void show_current_config();
 
+        /// @brief Confirms and uploads the current save of every favorited game to the remote.
+        void upload_favorites();
+
         /// @brief Cycles the backup-retention limit (Off -> 5 -> 10 -> 20) and saves it.
         void cycle_retention();
 
