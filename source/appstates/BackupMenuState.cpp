@@ -12,6 +12,7 @@
 #include "graphics/colors.hpp"
 #include "input.hpp"
 #include "keyboard/keyboard.hpp"
+#include "logging/logger.hpp"
 #include "sdl.hpp"
 #include "strings/strings.hpp"
 #include "stringutil.hpp"
@@ -54,13 +55,21 @@ BackupMenuState::BackupMenuState(data::User *user, data::TitleInfo *titleInfo, c
     , m_dataStruct(std::make_shared<BackupMenuState::DataStruct>())
     , m_controlGuide(strings::get_by_name(strings::names::CONTROL_GUIDES, 2))
 {
+    logger::log("[DIAG] BackupMenu ctor: start (title=%s)", m_titleInfo->get_title());
     BackupMenuState::initialize_static_members();
+    logger::log("[DIAG] after initialize_static_members");
     BackupMenuState::ensure_target_directory();
+    logger::log("[DIAG] after ensure_target_directory");
     BackupMenuState::initialize_remote_storage();
+    logger::log("[DIAG] after initialize_remote_storage");
     BackupMenuState::initialize_task_data();
+    logger::log("[DIAG] after initialize_task_data");
     BackupMenuState::initialize_info_string();
+    logger::log("[DIAG] after initialize_info_string");
     BackupMenuState::save_data_check();
+    logger::log("[DIAG] after save_data_check");
     BackupMenuState::refresh();
+    logger::log("[DIAG] after refresh -- ctor DONE");
 }
 
 //                      ---- Public functions ----
@@ -288,9 +297,13 @@ void BackupMenuState::initialize_info_string()
 
 void BackupMenuState::save_data_check()
 {
+    logger::log("[DIAG] save_data_check: mounting save...");
     fs::ScopedSaveMount saveMount{fs::DEFAULT_SAVE_MOUNT, m_saveInfo};
+    logger::log("[DIAG] save_data_check: mounted (open=%d), opening root...", saveMount.is_open());
     fslib::Directory saveRoot{fs::DEFAULT_SAVE_ROOT};
+    logger::log("[DIAG] save_data_check: root opened (open=%d), counting...", saveRoot.is_open());
     m_saveHasData = saveRoot.is_open() && saveRoot.get_count() > 0;
+    logger::log("[DIAG] save_data_check: done (hasData=%d)", m_saveHasData);
 }
 
 void BackupMenuState::initialize_remote_storage()
