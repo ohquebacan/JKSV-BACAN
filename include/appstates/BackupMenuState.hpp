@@ -195,6 +195,9 @@ class BackupMenuState final : public BaseState
         /// @brief Spawns the task that re-fetches the remote listing (manual cloud refresh).
         void reload_remote_listing();
 
+        /// @brief Opens the cloud-folder picker to associate a broken-name game with an existing cloud folder.
+        void open_cloud_folder_picker();
+
         /// @brief Just creates the pop-up that says Save is empty or w/e.
         void pop_save_empty();
 

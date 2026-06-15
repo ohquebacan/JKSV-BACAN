@@ -43,6 +43,10 @@ namespace data
             /// @return Whether or not the title has control data.
             bool has_control_data() const noexcept;
 
+            /// @brief Whether the game's name was unreadable/corrupt (no NACP name or invalid UTF-8 bytes). Such
+            /// games get an ugly/inconsistent folder name, so the UI offers to associate a cloud folder.
+            bool name_is_broken() const noexcept;
+
             /// @brief Returns the title of the title?
             /// @return Title directly from the NACP.
             const char *get_title() const noexcept;
@@ -109,6 +113,9 @@ namespace data
 
             /// @brief Saves whether or not the title has control data.
             bool m_hasData{};
+
+            /// @brief Whether the game's name was unreadable or had invalid bytes.
+            bool m_nameBroken{};
 
             /// @brief This is the path safe version of the title.
             char m_pathSafeTitle[TitleInfo::SIZE_PATH_SAFE]{};

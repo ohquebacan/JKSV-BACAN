@@ -13,10 +13,12 @@ namespace
 {
     // Some games ship a NACP name with invalid UTF-8 bytes. JKSV's text renderer can hang forever on those,
     // so replace any malformed byte sequence in-place with '?' (result is always valid UTF-8).
-    void sanitize_utf8(char *str) noexcept
+    // Returns true if anything was replaced (i.e. the name was broken).
+    bool sanitize_utf8(char *str) noexcept
     {
-        if (!str) { return; }
+        if (!str) { return false; }
 
+        bool changed     = false;
         unsigned char *s = reinterpret_cast<unsigned char *>(str);
         while (*s)
         {
@@ -30,6 +32,7 @@ namespace
             {
                 *s = '?';
                 ++s;
+                changed = true;
                 continue;
             }
 
@@ -47,10 +50,12 @@ namespace
             {
                 *s = '?';
                 ++s;
+                changed = true;
                 continue;
             }
             s += length;
         }
+        return changed;
     }
 } // namespace
 
@@ -77,12 +82,13 @@ data::TitleInfo::TitleInfo(uint64_t applicationID) noexcept
         m_entry                    = &m_data.nacp.lang[SetLanguage_ENUS]; // I'm hoping this is enough?
 
         std::snprintf(m_entry->name, TitleInfo::SIZE_PATH_SAFE, "%016lX", m_applicationID);
+        m_nameBroken = getError; // a real game whose name couldn't be read (system titles aren't "broken")
         TitleInfo::get_create_path_safe_title();
     }
     else if (!getError && !entryError)
     {
-        sanitize_utf8(m_entry->name); // guard the renderer against malformed NACP names
-        m_hasData = true;
+        m_nameBroken = sanitize_utf8(m_entry->name); // guard the renderer + flag malformed NACP names
+        m_hasData    = true;
         TitleInfo::get_create_path_safe_title();
     }
 }
@@ -96,10 +102,11 @@ data::TitleInfo::TitleInfo(uint64_t applicationID, NsApplicationControlData &con
     const bool entryError = error::libnx(nacpGetLanguageEntry(&m_data.nacp, &m_entry));
     if (entryError)
     {
-        m_entry = &m_data.nacp.lang[SetLanguage_ENUS];
+        m_entry      = &m_data.nacp.lang[SetLanguage_ENUS];
         std::snprintf(m_entry->name, TitleInfo::SIZE_PATH_SAFE, "%016lX", m_applicationID);
+        m_nameBroken = true;
     }
-    else { sanitize_utf8(m_entry->name); } // guard the renderer against malformed NACP names
+    else { m_nameBroken = sanitize_utf8(m_entry->name); } // guard the renderer + flag malformed NACP names
 
     TitleInfo::get_create_path_safe_title();
 }
@@ -111,6 +118,8 @@ uint64_t data::TitleInfo::get_application_id() const noexcept { return m_applica
 const NsApplicationControlData *data::TitleInfo::get_control_data() const noexcept { return &m_data; }
 
 bool data::TitleInfo::has_control_data() const noexcept { return m_hasData; }
+
+bool data::TitleInfo::name_is_broken() const noexcept { return m_nameBroken; }
 
 const char *data::TitleInfo::get_title() const noexcept { return m_entry->name; }
 

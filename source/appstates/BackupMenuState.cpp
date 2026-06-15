@@ -3,6 +3,7 @@
 #include "StateManager.hpp"
 #include "appstates/ConfirmState.hpp"
 #include "appstates/FadeState.hpp"
+#include "appstates/CloudFolderPickerState.hpp"
 #include "appstates/ProgressState.hpp"
 #include "appstates/TaskState.hpp"
 #include "config/config.hpp"
@@ -61,6 +62,13 @@ BackupMenuState::BackupMenuState(data::User *user, data::TitleInfo *titleInfo, c
     BackupMenuState::initialize_info_string();
     BackupMenuState::save_data_check();
     BackupMenuState::refresh();
+
+    // If the game's name is broken, the cloud folder won't match across consoles. Nudge the user to fix it.
+    if (m_titleInfo->name_is_broken() && remote::get_remote_storage())
+    {
+        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS,
+                                            "Nombre danado: pulsa ZL para asociar su carpeta de la nube.");
+    }
 }
 
 //                      ---- Public functions ----
@@ -95,6 +103,7 @@ void BackupMenuState::update()
     const bool yPressed  = input::button_pressed(HidNpadButton_Y);
     const bool zrPressed = input::button_pressed(HidNpadButton_ZR);
     const bool lPressed  = input::button_pressed(HidNpadButton_L);
+    const bool zlPressed = input::button_pressed(HidNpadButton_ZL);
 
     // Conditions.
     const bool newSelected     = selected == 0;
@@ -104,6 +113,7 @@ void BackupMenuState::update()
     const bool deleteBackup    = xPressed && !newSelected;
     const bool uploadBackup    = zrPressed && !newSelected;
     const bool reloadRemote    = lPressed && remote::get_remote_storage();
+    const bool pickCloudFolder = zlPressed && m_titleInfo->name_is_broken() && remote::get_remote_storage();
     const bool popEmpty        = aPressed && !m_saveHasData;
 
     if (newBackup) { BackupMenuState::name_and_create_backup(); }
@@ -112,6 +122,7 @@ void BackupMenuState::update()
     else if (deleteBackup) { BackupMenuState::confirm_delete(); }
     else if (uploadBackup) { BackupMenuState::upload_backup(); }
     else if (reloadRemote) { BackupMenuState::reload_remote_listing(); }
+    else if (pickCloudFolder) { BackupMenuState::open_cloud_folder_picker(); }
     else if (popEmpty) { BackupMenuState::pop_save_empty(); }
     else if (bPressed) { sm_slidePanel->close(); }
     else if (sm_slidePanel->is_closed()) { BackupMenuState::deactivate_state(); }
@@ -590,6 +601,11 @@ void BackupMenuState::reload_remote_listing()
 
     // Network I/O, so run it on a task thread with a spinner instead of freezing the UI.
     TaskState::create_push_fade(tasks::backup::reload_remote, m_dataStruct);
+}
+
+void BackupMenuState::open_cloud_folder_picker()
+{
+    CloudFolderPickerState::create_and_push(m_titleInfo, this);
 }
 
 void BackupMenuState::pop_save_empty()
