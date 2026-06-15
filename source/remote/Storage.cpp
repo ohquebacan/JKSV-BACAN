@@ -23,6 +23,23 @@ bool remote::Storage::directory_exists(std::string_view name) const noexcept
 
 void remote::Storage::return_to_root() { m_parent = m_root; }
 
+bool remote::Storage::has_backups_for(std::string_view name) const noexcept
+{
+    // Find the title's folder at the root (independent of the current directory).
+    auto is_title_dir = [&](const Item &item) noexcept
+    { return item.is_directory() && item.get_parent_id() == m_root && item.get_name() == name; };
+
+    auto findDir = std::find_if(m_list.begin(), m_list.end(), is_title_dir);
+    if (findDir == m_list.end()) { return false; }
+
+    // Does that folder contain at least one file?
+    const std::string_view directoryId = findDir->get_id();
+    auto is_file_child = [&](const Item &item) noexcept
+    { return !item.is_directory() && item.get_parent_id() == directoryId; };
+
+    return std::find_if(m_list.begin(), m_list.end(), is_file_child) != m_list.end();
+}
+
 void remote::Storage::set_root_directory(const remote::Item *root) { m_root = root->get_id(); }
 
 void remote::Storage::change_directory(const remote::Item *item) { m_parent = item->get_id(); }
