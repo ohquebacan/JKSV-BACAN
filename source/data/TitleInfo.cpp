@@ -9,6 +9,51 @@
 
 #include <cstring>
 
+namespace
+{
+    // Some games ship a NACP name with invalid UTF-8 bytes. JKSV's text renderer can hang forever on those,
+    // so replace any malformed byte sequence in-place with '?' (result is always valid UTF-8).
+    void sanitize_utf8(char *str) noexcept
+    {
+        if (!str) { return; }
+
+        unsigned char *s = reinterpret_cast<unsigned char *>(str);
+        while (*s)
+        {
+            const unsigned char lead = *s;
+            int length = 0;
+            if (lead < 0x80) { length = 1; }
+            else if ((lead & 0xE0) == 0xC0) { length = 2; }
+            else if ((lead & 0xF0) == 0xE0) { length = 3; }
+            else if ((lead & 0xF8) == 0xF0) { length = 4; }
+            else
+            {
+                *s = '?';
+                ++s;
+                continue;
+            }
+
+            bool valid = true;
+            for (int i = 1; i < length; i++)
+            {
+                if ((s[i] & 0xC0) != 0x80) // includes hitting the NUL terminator early
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (!valid)
+            {
+                *s = '?';
+                ++s;
+                continue;
+            }
+            s += length;
+        }
+    }
+} // namespace
+
 //                      ---- Construction ----
 
 data::TitleInfo::TitleInfo(uint64_t applicationID) noexcept
@@ -36,6 +81,7 @@ data::TitleInfo::TitleInfo(uint64_t applicationID) noexcept
     }
     else if (!getError && !entryError)
     {
+        sanitize_utf8(m_entry->name); // guard the renderer against malformed NACP names
         m_hasData = true;
         TitleInfo::get_create_path_safe_title();
     }
@@ -53,6 +99,7 @@ data::TitleInfo::TitleInfo(uint64_t applicationID, NsApplicationControlData &con
         m_entry = &m_data.nacp.lang[SetLanguage_ENUS];
         std::snprintf(m_entry->name, TitleInfo::SIZE_PATH_SAFE, "%016lX", m_applicationID);
     }
+    else { sanitize_utf8(m_entry->name); } // guard the renderer against malformed NACP names
 
     TitleInfo::get_create_path_safe_title();
 }
