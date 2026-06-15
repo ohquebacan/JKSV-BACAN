@@ -125,8 +125,9 @@ void CloudDashboardState::render()
 
 void CloudDashboardState::build_rows()
 {
+    // NOTE: do NOT reload() here. This runs on the main/render thread, and a synchronous network call freezes
+    // the whole app. Use the already-loaded in-memory listing (refreshed at startup and when opening games).
     remote::Storage *remote = remote::get_remote_storage();
-    if (remote) { remote->reload(); } // fresh cloud state for an accurate overview
 
     std::set<uint64_t> seen;
     int favorites = 0;
