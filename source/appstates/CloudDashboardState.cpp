@@ -38,6 +38,9 @@ namespace
     std::string local_latest(const data::TitleInfo *titleInfo)
     {
         const fslib::Path dir{config::get_working_directory() / titleInfo->get_path_safe_title()};
+        // Guard: never open a Directory on a path that doesn't exist (a favorite with no backups froze here).
+        if (!fslib::directory_exists(dir)) { return {}; }
+
         fslib::Directory listing{dir, false};
         std::string latest;
         if (listing.is_open())
