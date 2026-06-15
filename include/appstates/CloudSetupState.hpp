@@ -63,6 +63,12 @@ class CloudSetupState final : public BaseState
         /// @brief Confirms and restores the entire cloud onto this console, creating save containers as needed.
         void restore_all_from_cloud();
 
+        /// @brief Toggles smart-sync protection on/off and saves it.
+        void cycle_smart_sync();
+
+        /// @brief Updates the smart-sync menu row to show ON/OFF.
+        void update_smart_label();
+
         /// @brief Cycles the backup-retention limit (Off -> 5 -> 10 -> 20) and saves it.
         void cycle_retention();
 
