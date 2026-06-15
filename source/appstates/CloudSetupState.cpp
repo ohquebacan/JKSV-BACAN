@@ -1,9 +1,13 @@
 #include "appstates/CloudSetupState.hpp"
 
+#include "appstates/ConfirmState.hpp"
 #include "appstates/GoogleDriveGuideState.hpp"
+#include "appstates/MainMenuState.hpp"
 #include "appstates/WebDavFormState.hpp"
 #include "config/config.hpp"
+#include "data/data.hpp"
 #include "fslib.hpp"
+#include "tasks/mainmenu.hpp"
 #include "graphics/colors.hpp"
 #include "graphics/screen.hpp"
 #include "input.hpp"
@@ -27,6 +31,7 @@ namespace
         WEBDAV_GENERIC,
         GOOGLE_DRIVE_GUIDE,
         VIEW_CONFIG,
+        UPLOAD_FAVORITES,
         RETENTION
     };
 } // namespace
@@ -60,6 +65,7 @@ void CloudSetupState::update()
             case WEBDAV_GENERIC:     CloudSetupState::configure_generic(); break;
             case GOOGLE_DRIVE_GUIDE: CloudSetupState::show_google_drive_guide(); break;
             case VIEW_CONFIG:        CloudSetupState::show_current_config(); break;
+            case UPLOAD_FAVORITES:   CloudSetupState::upload_favorites(); break;
             case RETENTION:          CloudSetupState::cycle_retention(); break;
         }
     }
@@ -94,8 +100,25 @@ void CloudSetupState::initialize_menu()
     m_menu->add_option("WebDAV: Otro (generico)");
     m_menu->add_option("Google Drive (guia)");
     m_menu->add_option("Ver / editar configuracion actual");
+    m_menu->add_option("Subir favoritos a la nube");
     m_menu->add_option(""); // Retention row; filled by update_retention_label().
     CloudSetupState::update_retention_label();
+}
+
+void CloudSetupState::upload_favorites()
+{
+    remote::Storage *remote = remote::get_remote_storage();
+    if (!remote)
+    {
+        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, "No hay nube configurada.");
+        return;
+    }
+
+    auto data = std::make_shared<MainMenuState::DataStruct>();
+    data::get_users(data->userList);
+
+    const char *query = "Subir la partida actual de tus juegos favoritos (corazon) a la nube?";
+    ConfirmProgress::create_push_fade(query, false, tasks::mainmenu::upload_favorites_remote, nullptr, data);
 }
 
 void CloudSetupState::cycle_retention()

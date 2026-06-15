@@ -129,3 +129,65 @@ void tasks::mainmenu::backup_all_for_all_remote(sys::threadpool::JobData taskDat
 
     task->complete();
 }
+
+void tasks::mainmenu::upload_favorites_remote(sys::threadpool::JobData taskData)
+{
+    auto castData = std::static_pointer_cast<MainMenuState::DataStruct>(taskData);
+
+    sys::ProgressTask *task = static_cast<sys::ProgressTask *>(castData->task);
+    if (error::is_null(task)) { return; }
+
+    remote::Storage *remote = remote::get_remote_storage();
+    if (error::is_null(remote)) { TASK_FINISH_RETURN(task); }
+
+    auto backupStruct      = std::make_shared<BackupMenuState::DataStruct>();
+    backupStruct->task     = task;
+    backupStruct->killTask = false;
+
+    const data::UserList &userList = castData->userList;
+    for (data::User *user : userList)
+    {
+        if (user->get_account_save_type() == FsSaveDataType_System) { continue; }
+        backupStruct->user = user;
+
+        const int64_t titleCount = user->get_total_data_entries();
+        for (int64_t i = 0; i < titleCount; i++)
+        {
+            const FsSaveDataInfo *saveInfo = user->get_save_info_at(i);
+            if (error::is_null(saveInfo)) { continue; }
+
+            // Favorites only.
+            const uint64_t applicationID = saveInfo->application_id;
+            if (!config::is_favorite(applicationID)) { continue; }
+
+            backupStruct->saveInfo = saveInfo;
+            {
+                fs::ScopedSaveMount scopedMount{fs::DEFAULT_SAVE_MOUNT, saveInfo};
+                if (!scopedMount.is_open() || !fs::directory_has_contents(fs::DEFAULT_SAVE_ROOT)) { continue; }
+            }
+
+            data::TitleInfo *titleInfo = data::get_title_info_by_id(applicationID);
+            if (error::is_null(titleInfo)) { continue; }
+
+            backupStruct->titleInfo = titleInfo;
+            const std::string_view remoteTitle =
+                remote->supports_utf8() ? titleInfo->get_title() : titleInfo->get_path_safe_title();
+            const bool exists  = remote->directory_exists(remoteTitle);
+            const bool created = !exists && remote->create_directory(remoteTitle);
+            if (!exists && !created) { continue; }
+
+            remote::Item *targetDir = remote->get_directory_by_name(remoteTitle);
+            remote->change_directory(targetDir);
+
+            const char *pathSafe         = user->get_path_safe_nickname();
+            const std::string dateString = stringutil::get_date_string();
+            std::string remoteName       = stringutil::get_formatted_string("%s - %s.zip", pathSafe, dateString.c_str());
+            backupStruct->remoteName     = std::move(remoteName);
+
+            tasks::backup::create_new_backup_remote(backupStruct);
+            remote->return_to_root();
+        }
+    }
+
+    task->complete();
+}
