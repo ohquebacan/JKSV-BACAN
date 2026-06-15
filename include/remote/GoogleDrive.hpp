@@ -12,6 +12,9 @@ namespace remote
             /// @brief Loads the config from SD.
             GoogleDrive();
 
+            /// @brief Re-fetches the Drive listing into the in-memory list.
+            bool reload() override;
+
             /// @brief Creates a directory on Google Drive.
             /// @param name Name of the directory to create.
             bool create_directory(std::string_view name) override;

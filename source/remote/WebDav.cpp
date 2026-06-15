@@ -81,6 +81,21 @@ remote::WebDav::WebDav()
     m_isInitialized = true;
 }
 
+bool remote::WebDav::reload()
+{
+    // Keep m_root/m_parent (they're path strings that still exist on the server) and rebuild the listing by
+    // re-running the same recursive PROPFIND the constructor does.
+    m_list.clear();
+
+    remote::URL url{m_origin};
+    url.append_path(m_root).append_slash();
+
+    std::string xml{};
+    const bool propFind     = WebDav::prop_find(url, xml);
+    const bool xmlProcessed = propFind && WebDav::process_listing(xml);
+    return propFind && xmlProcessed;
+}
+
 bool remote::WebDav::create_directory(std::string_view name)
 {
     static constexpr const char *STRING_CREATE_DIR_ERROR = "Error creating WebDav directory: %s";
@@ -111,7 +126,8 @@ bool remote::WebDav::create_directory(std::string_view name)
     }
 
     // This is the ID string so we can make WebDav work within the same framework as Google Drive.
-    std::string id = m_parent + "/" + escapedName + "/";
+    // m_parent already ends with a '/', so don't insert another one (avoids "//" paths some servers reject).
+    std::string id = m_parent + escapedName + "/";
     m_list.emplace_back(name, id, m_parent, 0, true);
 
     return true;
@@ -151,7 +167,8 @@ bool remote::WebDav::upload_file(const fslib::Path &source, std::string_view rem
 
     if (!curl::perform(m_curl)) { return false; }
 
-    const std::string id = m_parent + "/" + escapedName;
+    // m_parent already ends with a '/', so don't insert another one (avoids "//" paths some servers reject).
+    const std::string id = m_parent + escapedName;
     m_list.emplace_back(remoteName, id, m_parent, fileSize, false);
 
     return true;

@@ -628,6 +628,39 @@ void tasks::backup::patch_backup(sys::threadpool::JobData taskData)
     task->complete();
 }
 
+void tasks::backup::reload_remote(sys::threadpool::JobData taskData)
+{
+    // Cast.
+    auto castData = std::static_pointer_cast<BackupMenuState::DataStruct>(taskData);
+
+    // Task.
+    sys::Task *task = castData->task;
+
+    // State.
+    BackupMenuState *spawningState = castData->spawningState;
+
+    // Remote.
+    remote::Storage *remote = remote::get_remote_storage();
+
+    // Invalid, bail.
+    if (error::is_null(task)) { return; }
+    else if (error::is_null({spawningState, remote})) { TASK_FINISH_RETURN(task); }
+
+    // Status.
+    task->set_status("Reloading cloud listing...");
+
+    // Re-pull the listing from the server, then re-resolve the current title folder and rebuild the menu.
+    const bool reloaded = remote->reload();
+    if (!reloaded)
+    {
+        const char *popError = strings::get_by_name(strings::names::BACKUPMENU_POPS, 9);
+        ui::PopMessageManager::push_message(POP_TICKS, popError);
+    }
+
+    spawningState->reinitialize_remote();
+    task->complete();
+}
+
 static void auto_backup(sys::ProgressTask *task, BackupMenuState::TaskData taskData)
 {
     // Unpack

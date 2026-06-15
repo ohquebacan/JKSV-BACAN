@@ -25,6 +25,11 @@ namespace remote
             /// @brief Returns whether or not the Storage type was successfully. initialized.
             bool is_initialized() const noexcept;
 
+            /// @brief Re-fetches the listing from the remote server, replacing the in-memory list so backups made
+            /// by other devices show up without restarting JKSV. Preserves the current root/parent.
+            /// @return True on success, false if the server request failed.
+            virtual bool reload() = 0;
+
             // Directory functions.
             /// @brief Returns whether or not a directory with name exists within the current parent.
             /// @param name Name of the directory to search for.
