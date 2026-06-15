@@ -3,12 +3,47 @@
 > **Fork no oficial** de **[JKSV](https://github.com/J-D-K/JKSV)**, creado por **J-D-K** — todo el mérito del proyecto original es suyo.
 > Se distribuye bajo la misma licencia **GPL-3.0**. Este fork **no está afiliado ni respaldado** por J-D-K.
 
-### Cambios de este fork respecto al original
-- 🐛 **Arreglo de la subida a la nube por WebDAV:** corrige rutas con `//` y la resolución de la carpeta por juego (las copias se subían fuera de su carpeta y no se encontraban entre consolas).
-- 🔄 **Botón L** para recargar el listado de la nube sin reiniciar la app.
-- ↕️ **Orden "más reciente primero"** en las copias (nube y local).
-- ☁️ **Pantalla "Configurar nube"** (en Extras): formulario WebDAV con presets (Koofr / Nextcloud / genérico), mostrar/ocultar contraseña, y guía paso a paso de Google Drive.
-- 🎨 Icono y nombre personalizados ("JKSV BACÁN").
+JKSV BACÁN añade una **suite completa de sincronización en la nube** para mover tus partidas entre consolas sin dolores de cabeza. Todo vive en **Extras → Configurar nube**.
+
+## ☁️ Guía rápida de uso
+
+### 1. Conecta tu nube (una sola vez)
+**Extras → Configurar nube** y elige tu servicio:
+- **WebDAV: Koofr / Nextcloud / Otro** → abre un formulario; rellena los campos (puedes **mostrar/ocultar la contraseña**) y pulsa **Guardar y conectar**.
+  - **Koofr:** `origin` = `https://app.koofr.net`, `basepath` = `dav/Koofr/JKSV`. *(No pongas `/dav` en el origin.)*
+  - **Nextcloud:** `basepath` = `remote.php/dav/files/TU_USUARIO/JKSV`.
+- **Google Drive (guía):** muestra los pasos para crear `client_secret.json` y dónde ponerlo.
+- **Ver / editar configuración actual:** revisa o corrige tus datos (incluida la contraseña).
+
+La config se guarda en `sd:/config/JKSV/webdav.json` (o `client_secret.json` para Drive).
+
+### 2. Sube y baja partidas
+- Entra a un juego → crea una copia → con *Auto-upload* activo se sube a la nube.
+- En la **cuadrícula de juegos**, una **insignia de nube ☁️** marca los juegos que ya tienen copia en el servidor.
+- Dentro del menú de un juego, pulsa **L** para **recargar** el listado de la nube al instante.
+
+### 3. Sincroniza solo lo que cruzas entre consolas (Favoritos ❤️)
+- Marca con el **corazón (botón Y)** los juegos que juegas en ambas consolas.
+- **Configurar nube → Subir favoritos** (antes de dejar una consola) y **Bajar favoritos** (al llegar a la otra).
+- Hace una copia local **PRE-SYNC** de seguridad antes de sobrescribir.
+
+### 4. Consola nueva: ten todo listo en un toque
+**Configurar nube → Restaurar TODO de la nube** → por cada juego instalado, **crea la partida si nunca lo abriste** y restaura la copia más reciente. Los juegos no instalados se saltan (instálalos y vuelve a correrlo).
+
+### 5. Panel de sincronización
+**Configurar nube → Panel de sincronización** → muestra, por favorito, la fecha de tu copia **local vs nube** y si te falta **[SUBIR]**, **[BAJAR]** o estás **[OK]**.
+
+### 6. Smart-sync (protege tu progreso) — ON por defecto
+Antes de sobrescribir un save al bajar de la nube, compara la **hora real de la partida** (no la fecha del backup). Si tu save local es **genuinamente más nuevo**, lo **salta** y no lo pisa. Toggle ON/OFF en **Configurar nube**.
+
+### 7. Auto-limpieza de copias (retención)
+**Configurar nube → Auto-limpieza** → mantén solo las últimas **5 / 10 / 20** copias por juego (local y nube). Apagada por defecto.
+
+## Otras mejoras
+- 🐛 Arreglo de la subida WebDAV (rutas con `//`, carpeta por juego, recarga al abrir el juego para evitar "copias fantasma").
+- ↕️ Copias ordenadas **más reciente primero**.
+- 🛡️ Más estabilidad: timeout de red ante conexiones muertas, y blindaje contra juegos con nombre corrupto (que congelaban incluso al JKSV original).
+- 🎨 Icono y marca "JKSV BACÁN".
 
 Para compilar, ver la sección **Building** más abajo (igual que el original).
 
