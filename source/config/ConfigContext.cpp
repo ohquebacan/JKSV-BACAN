@@ -66,6 +66,7 @@ void config::ConfigContext::initialize()
     m_configMap[config::keys::SHOW_CACHE_USER]         = 0;
     m_configMap[config::keys::SHOW_SYSTEM_USER]        = 0;
     m_configMap[config::keys::ENABLE_TRASH_BIN]        = 0;
+    m_configMap[config::keys::BACKUP_RETENTION]        = 0; // 0 = unlimited (off); set in-app to keep newest N.
     m_animationScaling                                 = DEFAULT_SCALING;
 }
 

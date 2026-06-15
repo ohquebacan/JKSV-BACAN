@@ -2,6 +2,7 @@
 
 #include "appstates/GoogleDriveGuideState.hpp"
 #include "appstates/WebDavFormState.hpp"
+#include "config/config.hpp"
 #include "fslib.hpp"
 #include "graphics/colors.hpp"
 #include "graphics/screen.hpp"
@@ -25,7 +26,8 @@ namespace
         WEBDAV_NEXTCLOUD,
         WEBDAV_GENERIC,
         GOOGLE_DRIVE_GUIDE,
-        VIEW_CONFIG
+        VIEW_CONFIG,
+        RETENTION
     };
 } // namespace
 
@@ -58,6 +60,7 @@ void CloudSetupState::update()
             case WEBDAV_GENERIC:     CloudSetupState::configure_generic(); break;
             case GOOGLE_DRIVE_GUIDE: CloudSetupState::show_google_drive_guide(); break;
             case VIEW_CONFIG:        CloudSetupState::show_current_config(); break;
+            case RETENTION:          CloudSetupState::cycle_retention(); break;
         }
     }
     else if (bPressed) { BaseState::deactivate(); }
@@ -91,6 +94,25 @@ void CloudSetupState::initialize_menu()
     m_menu->add_option("WebDAV: Otro (generico)");
     m_menu->add_option("Google Drive (guia)");
     m_menu->add_option("Ver / editar configuracion actual");
+    m_menu->add_option(""); // Retention row; filled by update_retention_label().
+    CloudSetupState::update_retention_label();
+}
+
+void CloudSetupState::cycle_retention()
+{
+    uint8_t keep = config::get_by_key(config::keys::BACKUP_RETENTION);
+    keep         = keep == 0 ? 5 : keep == 5 ? 10 : keep == 10 ? 20 : 0;
+    config::set_by_key(config::keys::BACKUP_RETENTION, keep);
+    config::save();
+    CloudSetupState::update_retention_label();
+}
+
+void CloudSetupState::update_retention_label()
+{
+    const uint8_t keep      = config::get_by_key(config::keys::BACKUP_RETENTION);
+    const std::string label = keep == 0 ? "Auto-limpieza de copias: Off"
+                                        : "Auto-limpieza de copias: mantener " + std::to_string(keep);
+    m_menu->edit_option(RETENTION, label);
 }
 
 void CloudSetupState::configure_koofr()

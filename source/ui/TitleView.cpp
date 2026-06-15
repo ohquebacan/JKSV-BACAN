@@ -5,6 +5,7 @@
 #include "graphics/colors.hpp"
 #include "input.hpp"
 #include "logging/logger.hpp"
+#include "remote/remote.hpp"
 
 #include <cmath>
 
@@ -90,7 +91,8 @@ void ui::TitleView::refresh()
 {
     m_titleTiles.clear();
 
-    const int entryCount = m_user->get_total_data_entries();
+    const int entryCount    = m_user->get_total_data_entries();
+    remote::Storage *remote = remote::get_remote_storage();
 
     for (int i = 0; i < entryCount; i++)
     {
@@ -101,7 +103,16 @@ void ui::TitleView::refresh()
         const bool isFavorite   = config::is_favorite(applicationID);
         sdl::SharedTexture icon = titleInfo->get_icon(); // I don't like this but w/e.
 
-        m_titleTiles.emplace_back(isFavorite, i, icon);
+        // Mark the tile if this game already has a backup on the remote storage.
+        bool hasCloudBackup = false;
+        if (remote)
+        {
+            const std::string_view folder =
+                remote->supports_utf8() ? titleInfo->get_title() : titleInfo->get_path_safe_title();
+            hasCloudBackup = remote->has_backups_for(folder);
+        }
+
+        m_titleTiles.emplace_back(isFavorite, i, icon, hasCloudBackup);
     }
 
     const int tileCount = m_titleTiles.size() - 1;

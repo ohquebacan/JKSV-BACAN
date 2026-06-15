@@ -11,7 +11,7 @@ namespace
 
 //                      ---- Construction ----
 
-ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon)
+ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon, bool hasCloudBackup)
     : m_transition(0,
                    0,
                    UNSELECTED_WIDTH_HEIGHT,
@@ -22,6 +22,7 @@ ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon)
                    UNSELECTED_WIDTH_HEIGHT,
                    m_transition.DEFAULT_THRESHOLD)
     , m_isFavorite(isFavorite)
+    , m_hasCloudBackup(hasCloudBackup)
     , m_index(index)
     , m_icon(icon) {};
 
@@ -56,6 +57,15 @@ void ui::TitleTile::render(sdl::SharedTexture &target, int x, int y)
 
     m_icon->render_stretched(target, renderX, renderY, width, height);
     if (m_isFavorite) { sdl::text::render(target, renderX + 2, renderY + 2, 28, sdl::text::NO_WRAP, colors::PINK, HEART_CHAR); }
+    if (m_hasCloudBackup)
+    {
+        // Small cyan badge in the top-right corner = this game has a backup on the remote storage.
+        const int badge = width / 5;
+        const int badgeX = renderX + width - badge - 4;
+        const int badgeY = renderY + 4;
+        sdl::render_rect_fill(target, badgeX - 2, badgeY - 2, badge + 4, badge + 4, colors::BLACK);
+        sdl::render_rect_fill(target, badgeX, badgeY, badge, badge, colors::BLUE_GREEN);
+    }
 }
 
 void ui::TitleTile::reset() noexcept

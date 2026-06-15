@@ -35,6 +35,11 @@ namespace remote
             /// @param name Name of the directory to search for.
             bool directory_exists(std::string_view name) const noexcept;
 
+            /// @brief Returns whether a root-level folder `name` exists and contains at least one file. Used to
+            /// show the "has cloud backup" badge on the title grid, independent of the current directory.
+            /// @param name Name of the per-title folder to look for.
+            bool has_backups_for(std::string_view name) const noexcept;
+
             /// @brief Returns the parent to the root directory.
             void return_to_root();
 

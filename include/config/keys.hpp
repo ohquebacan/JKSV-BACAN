@@ -30,4 +30,6 @@ namespace config::keys
     inline constexpr std::string_view UI_ANIMATION_SCALE      = "UIAnimationScaling";
     inline constexpr std::string_view FAVORITES               = "Favorites";
     inline constexpr std::string_view BLACKLIST               = "BlackList";
+    /// @brief How many backups to keep per game (0 = unlimited). Older ones are pruned after a new backup.
+    inline constexpr std::string_view BACKUP_RETENTION        = "BackupRetention";
 }

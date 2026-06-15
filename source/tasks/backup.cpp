@@ -9,7 +9,10 @@
 #include "stringutil.hpp"
 #include "ui/PopMessageManager.hpp"
 
+#include <algorithm>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -18,6 +21,79 @@ namespace
 
     // I got tired of typing out the DEFAULT_TICKS.
     constexpr int POP_TICKS = ui::PopMessageManager::DEFAULT_TICKS;
+
+    // Backups are named "[prefix] - YYYY-MM-DD_HH-MM-SS[.zip]"; that 19-char stamp sorts chronologically as text.
+    std::string retention_sort_key(std::string_view name)
+    {
+        if (name.size() > 4 && name.substr(name.size() - 4) == STRING_ZIP_EXT) { name = name.substr(0, name.size() - 4); }
+        constexpr size_t stamp = 19; // YYYY-MM-DD_HH-MM-SS
+        return name.size() >= stamp ? std::string(name.substr(name.size() - stamp)) : std::string(name);
+    }
+
+    // Keeps only the newest `keep` local backups in `directory`; older ones go to the trash bin (or are deleted).
+    void prune_local_backups(const fslib::Path &directory, int keep)
+    {
+        if (keep <= 0) { return; }
+
+        fslib::Directory listing{directory, false};
+        if (!listing.is_open()) { return; }
+
+        const int count = static_cast<int>(listing.get_count());
+        if (count <= keep) { return; }
+
+        std::vector<int> order;
+        order.reserve(count);
+        for (int i = 0; i < count; i++) { order.push_back(i); }
+        std::sort(order.begin(),
+                  order.end(),
+                  [&](int a, int b)
+                  { return retention_sort_key(listing[a].get_filename()) > retention_sort_key(listing[b].get_filename()); });
+
+        const bool trash = config::get_by_key(config::keys::ENABLE_TRASH_BIN);
+        for (int i = keep; i < count; i++)
+        {
+            const fslib::Path target{directory / listing[order[i]].get_filename()};
+            const bool isDir = fslib::directory_exists(target);
+            if (trash)
+            {
+                const fslib::Path trashPath{config::get_working_directory() / "_TRASH_" / listing[order[i]].get_filename()};
+                if (isDir) { error::fslib(fslib::rename_directory(target, trashPath)); }
+                else { error::fslib(fslib::rename_file(target, trashPath)); }
+            }
+            else if (isDir) { error::fslib(fslib::delete_directory_recursively(target)); }
+            else { error::fslib(fslib::delete_file(target)); }
+        }
+    }
+
+    // Keeps only the newest `keep` files in the remote's current folder; older ones are deleted from the server.
+    void prune_remote_backups(remote::Storage *remote, int keep)
+    {
+        if (keep <= 0 || !remote) { return; }
+
+        remote::Storage::DirectoryListing listing;
+        remote->get_directory_listing(listing);
+
+        std::vector<remote::Item *> files;
+        for (remote::Item *item : listing)
+        {
+            if (!item->is_directory()) { files.push_back(item); }
+        }
+        if (static_cast<int>(files.size()) <= keep) { return; }
+
+        std::sort(files.begin(),
+                  files.end(),
+                  [](const remote::Item *a, const remote::Item *b)
+                  { return retention_sort_key(a->get_name()) > retention_sort_key(b->get_name()); });
+
+        // Collect IDs first: delete_item mutates the list and would invalidate these pointers mid-loop.
+        std::vector<std::string> toDelete;
+        for (size_t i = static_cast<size_t>(keep); i < files.size(); i++) { toDelete.emplace_back(files[i]->get_id()); }
+        for (const std::string &id : toDelete)
+        {
+            remote::Item *item = remote->get_item_by_id(id);
+            if (item) { remote->delete_item(item); }
+        }
+    }
 }
 
 // Definitions at bottom.
@@ -82,6 +158,12 @@ void tasks::backup::create_new_backup_local(sys::threadpool::JobData taskData)
         write_meta_file(path, saveInfo);
         auto scopedMount = create_scoped_mount(saveInfo);
         fs::copy_directory(fs::DEFAULT_SAVE_ROOT, path, task);
+    }
+
+    // Prune old local backups for this game if retention is enabled.
+    {
+        const int keep = config::get_by_key(config::keys::BACKUP_RETENTION);
+        if (keep > 0 && castData->basePath && castData->basePath->is_valid()) { prune_local_backups(*castData->basePath, keep); }
     }
 
     // This is like this so I can reuse this code.
@@ -161,6 +243,12 @@ void tasks::backup::create_new_backup_remote(sys::threadpool::JobData taskData)
     {
         const char *popErrorUploading = strings::get_by_name(strings::names::BACKUPMENU_POPS, 10);
         ui::PopMessageManager::push_message(POP_TICKS, popErrorUploading);
+    }
+
+    // Prune old remote backups for this game if retention is enabled (current folder is this game's).
+    {
+        const int keep = config::get_by_key(config::keys::BACKUP_RETENTION);
+        if (uploaded && keep > 0) { prune_remote_backups(remote, keep); }
     }
 
     if (spawningState) { spawningState->refresh(); }

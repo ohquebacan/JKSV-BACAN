@@ -53,4 +53,10 @@ class CloudSetupState final : public BaseState
 
         /// @brief Opens the form loaded with the current webdav.json (or a pop if there is none).
         void show_current_config();
+
+        /// @brief Cycles the backup-retention limit (Off -> 5 -> 10 -> 20) and saves it.
+        void cycle_retention();
+
+        /// @brief Updates the retention menu row to show the current limit.
+        void update_retention_label();
 };
