@@ -237,7 +237,7 @@ void JKSV::setup_translation_info_strings()
     const char *author            = strings::get_by_name(strings::names::TRANSLATION, 1);
     m_showTranslationInfo         = std::char_traits<char>::compare(author, "NULL", 4) != 0; // This is whether or not to show.
     m_translationInfo             = stringutil::get_formatted_string(translationFormat, author);
-    m_buildString = stringutil::get_formatted_string("v. %02d.%02d.%04d", builddate::MONTH, builddate::DAY, builddate::YEAR);
+    m_buildString = stringutil::get_formatted_string("v. %04d-%02d-%02d OQB!", builddate::YEAR, builddate::MONTH, builddate::DAY);
 }
 
 void JKSV::applet_mode_warning() noexcept
@@ -280,7 +280,7 @@ void JKSV::render_base()
     static constexpr int BUILD_SIZE = 14;
 
     // This is just the JKSV string.
-    static constexpr std::string_view TITLE_TEXT = "JKSV";
+    static constexpr std::string_view TITLE_TEXT = "JKSV BACÁN";
 
     // Top and bottom framing lines.
     sdl::render_line(sdl::Texture::Null, LINE_X_BEGIN, LINE_A_Y, LINE_X_END, LINE_A_Y, colors::WHITE);

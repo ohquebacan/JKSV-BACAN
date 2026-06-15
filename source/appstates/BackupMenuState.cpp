@@ -4,6 +4,7 @@
 #include "appstates/ConfirmState.hpp"
 #include "appstates/FadeState.hpp"
 #include "appstates/ProgressState.hpp"
+#include "appstates/TaskState.hpp"
 #include "config/config.hpp"
 #include "error.hpp"
 #include "fs/fs.hpp"
@@ -19,7 +20,28 @@
 #include "ui/PopMessageManager.hpp"
 #include "ui/TextScroll.hpp"
 
+#include <algorithm>
 #include <cstring>
+#include <string>
+#include <vector>
+
+namespace
+{
+    // Backups are named "[prefix] - YYYY-MM-DD_HH-MM-SS[.zip]". That 19-char timestamp sorts chronologically
+    // as plain text, so keying on it lets us list newest-first regardless of the name prefix (user, AUTO, etc.).
+    std::string backup_sort_key(std::string_view name)
+    {
+        constexpr std::string_view zipExt = ".zip";
+        if (name.size() > zipExt.size() && name.substr(name.size() - zipExt.size()) == zipExt)
+        {
+            name = name.substr(0, name.size() - zipExt.size());
+        }
+
+        constexpr size_t stampLength = 19; // YYYY-MM-DD_HH-MM-SS
+        if (name.size() >= stampLength) { return std::string(name.substr(name.size() - stampLength)); }
+        return std::string(name);
+    }
+} // namespace
 
 //                      ---- Construction ----
 
@@ -72,6 +94,7 @@ void BackupMenuState::update()
     const bool xPressed  = input::button_pressed(HidNpadButton_X);
     const bool yPressed  = input::button_pressed(HidNpadButton_Y);
     const bool zrPressed = input::button_pressed(HidNpadButton_ZR);
+    const bool lPressed  = input::button_pressed(HidNpadButton_L);
 
     // Conditions.
     const bool newSelected     = selected == 0;
@@ -80,6 +103,7 @@ void BackupMenuState::update()
     const bool restoreBackup   = yPressed && !newSelected;
     const bool deleteBackup    = xPressed && !newSelected;
     const bool uploadBackup    = zrPressed && !newSelected;
+    const bool reloadRemote    = lPressed && remote::get_remote_storage();
     const bool popEmpty        = aPressed && !m_saveHasData;
 
     if (newBackup) { BackupMenuState::name_and_create_backup(); }
@@ -87,6 +111,7 @@ void BackupMenuState::update()
     else if (restoreBackup) { BackupMenuState::confirm_restore(); }
     else if (deleteBackup) { BackupMenuState::confirm_delete(); }
     else if (uploadBackup) { BackupMenuState::upload_backup(); }
+    else if (reloadRemote) { BackupMenuState::reload_remote_listing(); }
     else if (popEmpty) { BackupMenuState::pop_save_empty(); }
     else if (bPressed) { sm_slidePanel->close(); }
     else if (sm_slidePanel->is_closed()) { BackupMenuState::deactivate_state(); }
@@ -161,6 +186,13 @@ void BackupMenuState::refresh()
     {
         const std::string_view prefix = remote->get_prefix();
         remote->get_directory_listing(m_remoteListing);
+
+        // Newest first: sort by the timestamp embedded in each backup's name (descending).
+        std::sort(m_remoteListing.begin(),
+                  m_remoteListing.end(),
+                  [](const remote::Item *a, const remote::Item *b)
+                  { return backup_sort_key(a->get_name()) > backup_sort_key(b->get_name()); });
+
         int index{};
         for (const remote::Item *item : m_remoteListing)
         {
@@ -172,12 +204,28 @@ void BackupMenuState::refresh()
         }
     }
 
-    int index{};
-    for (const fslib::DirectoryEntry &entry : m_directoryListing)
+    // Sort an index list so the stored indices keep pointing at the right entry in m_directoryListing while
+    // still presenting local backups newest-first.
+    std::vector<int> localOrder;
+    localOrder.reserve(static_cast<size_t>(m_directoryListing.get_count()));
+    for (int i = 0; i < static_cast<int>(m_directoryListing.get_count()); i++) { localOrder.push_back(i); }
+    std::sort(localOrder.begin(),
+              localOrder.end(),
+              [this](int a, int b)
+              { return backup_sort_key(m_directoryListing[a].get_filename()) >
+                       backup_sort_key(m_directoryListing[b].get_filename()); });
+
+    for (const int i : localOrder)
     {
-        sm_backupMenu->add_option(entry.get_filename());
-        m_menuEntries.push_back({MenuEntryType::Local, index++});
+        sm_backupMenu->add_option(m_directoryListing[i].get_filename());
+        m_menuEntries.push_back({MenuEntryType::Local, i});
     }
+}
+
+void BackupMenuState::reinitialize_remote()
+{
+    BackupMenuState::initialize_remote_storage();
+    BackupMenuState::refresh();
 }
 
 void BackupMenuState::save_data_written()
@@ -249,6 +297,11 @@ void BackupMenuState::initialize_remote_storage()
 {
     remote::Storage *remote = remote::get_remote_storage();
     if (!remote) { return; }
+
+    // Always resolve the per-title folder relative to the JKSV root. Every other navigation site pairs
+    // change_directory() with return_to_root(); doing it here too keeps the parent from leaking in from a
+    // previous state, which otherwise nests/creates title folders in the wrong place.
+    remote->return_to_root();
 
     const bool supportsUtf8            = remote->supports_utf8();
     const std::string_view remoteTitle = supportsUtf8 ? m_titleInfo->get_title() : m_titleInfo->get_path_safe_title();
@@ -526,6 +579,15 @@ void BackupMenuState::upload_backup()
         ConfirmProgress::create_push_fade(query, holdRequired, tasks::backup::patch_backup, nullptr, m_dataStruct);
     }
     else { ProgressState::create_push_fade(tasks::backup::upload_backup, m_dataStruct); }
+}
+
+void BackupMenuState::reload_remote_listing()
+{
+    remote::Storage *remote = remote::get_remote_storage();
+    if (error::is_null(remote)) { return; }
+
+    // Network I/O, so run it on a task thread with a spinner instead of freezing the UI.
+    TaskState::create_push_fade(tasks::backup::reload_remote, m_dataStruct);
 }
 
 void BackupMenuState::pop_save_empty()

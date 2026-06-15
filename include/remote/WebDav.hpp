@@ -12,6 +12,9 @@ namespace remote
             /// @brief Loads the WebDav config from the SD card and loads the listing.
             WebDav();
 
+            /// @brief Re-runs the PROPFIND from the root and rebuilds the in-memory list.
+            bool reload() override;
+
             /// @brief Creates a new directory on the WebDav server.
             /// @param name Name of the directory to create.
             bool create_directory(std::string_view name) override;

@@ -80,6 +80,13 @@ remote::GoogleDrive::GoogleDrive()
 
 //                      ---- Public functions ----
 
+bool remote::GoogleDrive::reload()
+{
+    // Keep m_root/m_parent (they're folder IDs that still exist on the server) and just rebuild the listing.
+    m_list.clear();
+    return GoogleDrive::request_listing();
+}
+
 bool remote::GoogleDrive::create_directory(std::string_view name)
 {
     if (!GoogleDrive::token_is_valid() && !GoogleDrive::refresh_token()) { return false; }

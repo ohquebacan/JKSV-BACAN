@@ -49,6 +49,10 @@ class BackupMenuState final : public BaseState
         /// @brief Refreshes the directory listing and menu.
         void refresh();
 
+        /// @brief Re-resolves the current title's remote folder and rebuilds the menu. Called by the reload task
+        /// after it has re-fetched the listing from the server.
+        void reinitialize_remote();
+
         /// @brief Allows a spawned task to tell this class that it wrote save data to the system.
         void save_data_written();
 
@@ -187,6 +191,9 @@ class BackupMenuState final : public BaseState
 
         /// @brief Uploads the currently selected backup to the remote storage.
         void upload_backup();
+
+        /// @brief Spawns the task that re-fetches the remote listing (manual cloud refresh).
+        void reload_remote_listing();
 
         /// @brief Just creates the pop-up that says Save is empty or w/e.
         void pop_save_empty();

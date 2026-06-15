@@ -1,5 +1,6 @@
 #include "appstates/ExtrasMenuState.hpp"
 
+#include "appstates/CloudSetupState.hpp"
 #include "appstates/FileModeState.hpp"
 #include "appstates/MainMenuState.hpp"
 #include "data/data.hpp"
@@ -26,7 +27,8 @@ namespace
         BIS_SAFE,
         BIS_SYSTEM,
         BIS_USER,
-        TERMINATE_PROCESS
+        TERMINATE_PROCESS,
+        CLOUD_SETUP
     };
 } // namespace
 
@@ -64,6 +66,7 @@ void ExtrasMenuState::update()
             case BIS_SYSTEM:        ExtrasMenuState::system_to_sd(); break;
             case BIS_USER:          ExtrasMenuState::user_to_sd(); break;
             case TERMINATE_PROCESS: ExtrasMenuState::terminate_process(); break;
+            case CLOUD_SETUP:       CloudSetupState::create_and_push(); break;
         }
     }
     else if (bPressed) { BaseState::deactivate(); }
@@ -91,6 +94,9 @@ void ExtrasMenuState::initialize_menu()
     {
         m_extrasMenu->add_option(option);
     }
+
+    // Appended after the localized options; this is our added in-app cloud setup entry (index CLOUD_SETUP).
+    m_extrasMenu->add_option("Configurar nube");
 }
 
 void ExtrasMenuState::reinitialize_data() { data::launch_initialization(true, finish_reinitialization); }

@@ -38,9 +38,9 @@ SOURCES		:=	source source/appstates source/config source/curl source/data source
 DATA		:=	data
 INCLUDES	:=	include ./Libraries/FsLib/Switch/FsLib/include ./Libraries/SDLLib/SDL/include
 EXEFS_SRC	:=	exefs_src
-APP_TITLE   :=  JKSV
-APP_AUTHOR  :=  JK
-APP_VERSION :=  12.02.2025
+APP_TITLE   :=  JKSV BACÁN
+APP_AUTHOR  :=  JK / OQB
+APP_VERSION :=  2026-06-14 OQB
 ROMFS	    :=	romfs
 ICON		:=	icon.jpg
 

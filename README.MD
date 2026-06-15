@@ -1,3 +1,19 @@
+# JKSV BACÁN
+
+> **Fork no oficial** de **[JKSV](https://github.com/J-D-K/JKSV)**, creado por **J-D-K** — todo el mérito del proyecto original es suyo.
+> Se distribuye bajo la misma licencia **GPL-3.0**. Este fork **no está afiliado ni respaldado** por J-D-K.
+
+### Cambios de este fork respecto al original
+- 🐛 **Arreglo de la subida a la nube por WebDAV:** corrige rutas con `//` y la resolución de la carpeta por juego (las copias se subían fuera de su carpeta y no se encontraban entre consolas).
+- 🔄 **Botón L** para recargar el listado de la nube sin reiniciar la app.
+- ↕️ **Orden "más reciente primero"** en las copias (nube y local).
+- ☁️ **Pantalla "Configurar nube"** (en Extras): formulario WebDAV con presets (Koofr / Nextcloud / genérico), mostrar/ocultar contraseña, y guía paso a paso de Google Drive.
+- 🎨 Icono y nombre personalizados ("JKSV BACÁN").
+
+Para compilar, ver la sección **Building** más abajo (igual que el original).
+
+---
+
 # JKSV Rewrite
 <p align="center">
   <a href="https://github.com/J-D-K/JKSV">
