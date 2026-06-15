@@ -689,6 +689,185 @@ void tasks::backup::download_favorites_remote(sys::threadpool::JobData taskData)
     task->complete();
 }
 
+// Shared restore core for the cloud sweep: PRE-SYNC safety backup, download the item, wipe the live save and
+// extract the cloud backup into it. data must have a valid user/titleInfo/saveInfo/task (no spawning state).
+static bool restore_cloud_item_into_save(BackupMenuState::TaskData data, remote::Item *latest)
+{
+    static constexpr const char *DOWNLOAD_PATH = "sdmc:/jksv_download.zip";
+
+    sys::ProgressTask *task        = static_cast<sys::ProgressTask *>(data->task);
+    data::User *user               = data->user;
+    data::TitleInfo *titleInfo     = data->titleInfo;
+    const FsSaveDataInfo *saveInfo = data->saveInfo;
+    remote::Storage *remote        = remote::get_remote_storage();
+
+    if (error::is_null(task) || error::is_null({user, titleInfo, remote, latest}) || saveInfo == nullptr) { return false; }
+
+    const fslib::Path localDir{config::get_working_directory() / titleInfo->get_path_safe_title()};
+
+    // 1) Forced PRE-SYNC local safety backup of the current save (recoverable if the restore goes wrong).
+    {
+        if (!fslib::directory_exists(localDir)) { error::fslib(fslib::create_directories_recursively(localDir)); }
+        const std::string dateString = stringutil::get_date_string();
+        std::string safetyName       = stringutil::get_formatted_string("PRE-SYNC - %s.zip", dateString.c_str());
+        data->path                   = localDir / safetyName;
+        data->killTask               = false;
+        tasks::backup::create_new_backup_local(data);
+    }
+
+    // 2) Download the cloud backup.
+    {
+        const char *statusFormat = strings::get_by_name(strings::names::IO_STATUSES, 4);
+        std::string status       = stringutil::get_formatted_string(statusFormat, titleInfo->get_title());
+        task->set_status(status);
+    }
+    const fslib::Path tempPath{DOWNLOAD_PATH};
+    if (!remote->download_file(latest, tempPath, task)) { return false; }
+
+    fs::MiniUnzip backup{tempPath};
+    if (!backup.is_open())
+    {
+        error::fslib(fslib::delete_file(tempPath));
+        return false;
+    }
+
+    // 3) Wipe the live save and extract the cloud backup into it.
+    {
+        auto scopedMount = create_scoped_mount(saveInfo);
+        error::fslib(fslib::delete_directory_recursively(fs::DEFAULT_SAVE_ROOT));
+        error::fslib(fslib::commit_data_to_file_system(fs::DEFAULT_SAVE_MOUNT));
+    }
+    read_and_process_meta(backup, data, task);
+    {
+        FsSaveDataExtraData extraData{};
+        const bool readExtra      = fs::read_save_extra_data(saveInfo, extraData);
+        const uint8_t saveType    = user->get_account_save_type();
+        const int64_t journalSize = readExtra ? extraData.journal_size : titleInfo->get_journal_size(saveType);
+
+        auto scopedMount = create_scoped_mount(saveInfo);
+        fs::copy_zip_to_directory(backup, fs::DEFAULT_SAVE_ROOT, journalSize, task);
+    }
+    backup.close();
+    error::fslib(fslib::delete_file(tempPath));
+    return true;
+}
+
+void tasks::backup::restore_all_from_cloud(sys::threadpool::JobData taskData)
+{
+    auto castData = std::static_pointer_cast<MainMenuState::DataStruct>(taskData);
+
+    sys::ProgressTask *task = static_cast<sys::ProgressTask *>(castData->task);
+    if (error::is_null(task)) { return; }
+
+    remote::Storage *remote = remote::get_remote_storage();
+    if (error::is_null(remote)) { TASK_FINISH_RETURN(task); }
+
+    // Fresh full listing so the cloud state is current.
+    remote->reload();
+
+    // Target the first real account profile (account saves belong to a user).
+    data::User *targetUser = nullptr;
+    {
+        data::UserList userList;
+        data::get_users(userList);
+        for (data::User *user : userList)
+        {
+            if (user->get_account_save_type() == FsSaveDataType_Account)
+            {
+                targetUser = user;
+                break;
+            }
+        }
+    }
+    if (error::is_null(targetUser))
+    {
+        ui::PopMessageManager::push_message(POP_TICKS, "No hay cuenta de usuario para restaurar.");
+        TASK_FINISH_RETURN(task);
+    }
+
+    const FsSaveDataType saveType = targetUser->get_account_save_type();
+
+    // Installed titles that support this save type (includes games never launched).
+    data::TitleInfoList installedTitles;
+    data::get_title_info_by_type(saveType, installedTitles);
+
+    // List the cloud's per-game folders at the root.
+    remote->return_to_root();
+    remote::Storage::DirectoryListing rootItems;
+    remote->get_directory_listing(rootItems);
+
+    auto data           = std::make_shared<BackupMenuState::DataStruct>();
+    data->task          = task;
+    data->user          = targetUser;
+    data->killTask      = false;
+    data->spawningState = nullptr;
+
+    int restored = 0, createdSaves = 0, notInstalled = 0, otherSkips = 0;
+
+    for (remote::Item *folder : rootItems)
+    {
+        if (!folder->is_directory()) { continue; }
+        const std::string_view folderName = folder->get_name();
+
+        // Match the cloud folder to an installed title by name (either form).
+        data::TitleInfo *titleInfo = nullptr;
+        for (data::TitleInfo *candidate : installedTitles)
+        {
+            if (folderName == candidate->get_title() || folderName == candidate->get_path_safe_title())
+            {
+                titleInfo = candidate;
+                break;
+            }
+        }
+        if (error::is_null(titleInfo)) { ++notInstalled; continue; }
+
+        const uint64_t applicationID = titleInfo->get_application_id();
+
+        // Ensure a save container exists for this user; create it if the game was never launched.
+        FsSaveDataInfo *saveInfo = targetUser->get_save_info_by_id(applicationID);
+        if (saveInfo == nullptr)
+        {
+            if (!fs::create_save_data_for(targetUser, titleInfo, 0)) { ++otherSkips; continue; }
+            targetUser->load_user_data();
+            saveInfo = targetUser->get_save_info_by_id(applicationID);
+            if (saveInfo == nullptr) { ++otherSkips; continue; }
+            ++createdSaves;
+        }
+
+        // Newest cloud backup in this folder.
+        remote->change_directory(folder);
+        remote::Storage::DirectoryListing files;
+        remote->get_directory_listing(files);
+        remote::Item *latest = nullptr;
+        std::string latestKey;
+        for (remote::Item *item : files)
+        {
+            if (item->is_directory()) { continue; }
+            const std::string key = retention_sort_key(item->get_name());
+            if (!latest || key > latestKey)
+            {
+                latest    = item;
+                latestKey = key;
+            }
+        }
+        remote->return_to_root();
+        if (error::is_null(latest)) { ++otherSkips; continue; }
+
+        data->titleInfo = titleInfo;
+        data->saveInfo  = saveInfo;
+        if (restore_cloud_item_into_save(data, latest)) { ++restored; }
+        else { ++otherSkips; }
+    }
+
+    std::string report = stringutil::get_formatted_string("Restaurados: %d (saves creados: %d)  -  no instalados: %d",
+                                                          restored,
+                                                          createdSaves,
+                                                          notInstalled);
+    ui::PopMessageManager::push_message(POP_TICKS, report);
+
+    task->complete();
+}
+
 void tasks::backup::delete_backup_local(sys::threadpool::JobData taskData)
 {
     // Cast.

@@ -60,6 +60,9 @@ class CloudSetupState final : public BaseState
         /// @brief Confirms and restores the newest cloud backup of every favorited game (overwrites local saves).
         void download_favorites();
 
+        /// @brief Confirms and restores the entire cloud onto this console, creating save containers as needed.
+        void restore_all_from_cloud();
+
         /// @brief Cycles the backup-retention limit (Off -> 5 -> 10 -> 20) and saves it.
         void cycle_retention();
 

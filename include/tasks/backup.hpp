@@ -33,4 +33,8 @@ namespace tasks::backup
 
     /// @brief Downloads and restores the newest cloud backup for every favorited game (with PRE-SYNC safety backup).
     void download_favorites_remote(sys::threadpool::JobData taskData);
+
+    /// @brief For every game folder in the cloud, finds the installed title, creates its save container if missing
+    /// (no game launch needed), and restores the newest cloud backup. Skips titles that aren't installed.
+    void restore_all_from_cloud(sys::threadpool::JobData taskData);
 }
