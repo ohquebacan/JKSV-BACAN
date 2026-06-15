@@ -1,5 +1,6 @@
 #include "appstates/CloudSetupState.hpp"
 
+#include "appstates/CloudDashboardState.hpp"
 #include "appstates/ConfirmState.hpp"
 #include "appstates/GoogleDriveGuideState.hpp"
 #include "appstates/MainMenuState.hpp"
@@ -32,6 +33,7 @@ namespace
         WEBDAV_GENERIC,
         GOOGLE_DRIVE_GUIDE,
         VIEW_CONFIG,
+        DASHBOARD,
         UPLOAD_FAVORITES,
         DOWNLOAD_FAVORITES,
         RESTORE_ALL,
@@ -68,6 +70,7 @@ void CloudSetupState::update()
             case WEBDAV_GENERIC:     CloudSetupState::configure_generic(); break;
             case GOOGLE_DRIVE_GUIDE: CloudSetupState::show_google_drive_guide(); break;
             case VIEW_CONFIG:        CloudSetupState::show_current_config(); break;
+            case DASHBOARD:          CloudDashboardState::create_and_push(); break;
             case UPLOAD_FAVORITES:   CloudSetupState::upload_favorites(); break;
             case DOWNLOAD_FAVORITES: CloudSetupState::download_favorites(); break;
             case RESTORE_ALL:        CloudSetupState::restore_all_from_cloud(); break;
@@ -105,6 +108,7 @@ void CloudSetupState::initialize_menu()
     m_menu->add_option("WebDAV: Otro (generico)");
     m_menu->add_option("Google Drive (guia)");
     m_menu->add_option("Ver / editar configuracion actual");
+    m_menu->add_option("Panel de sincronizacion (favoritos)");
     m_menu->add_option("Subir favoritos a la nube");
     m_menu->add_option("Bajar favoritos de la nube");
     m_menu->add_option("Restaurar TODO de la nube (crea saves)");
