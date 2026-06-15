@@ -33,12 +33,18 @@ class TitleSelectState final : public TitleSelectCommon
         /// @brief Runs the render routine.
         void render() override;
 
+        /// @brief Runs while another state (backup/options menu) is on top; flags a refresh for when we return.
+        void sub_update() override;
+
         /// @brief Refreshes the view.
         void refresh() override;
 
     private:
         /// @brief Pointer to the user the view belongs to.
         data::User *m_user{};
+
+        /// @brief Set while a menu is on top so the grid re-marks cloud badges when it regains control.
+        bool m_refreshPending{};
 
         /// @brief Target to render to.
         sdl::SharedTexture m_renderTarget{};

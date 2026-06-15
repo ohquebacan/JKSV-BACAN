@@ -34,6 +34,13 @@ void TitleSelectState::update()
 {
     if (!TitleSelectState::title_count_check()) { return; }
 
+    // We just came back from a menu (backup/options) that may have added or removed cloud backups: re-mark.
+    if (m_refreshPending)
+    {
+        m_titleView->refresh();
+        m_refreshPending = false;
+    }
+
     const bool hasFocus = BaseState::has_focus();
     const bool aPressed = input::button_pressed(HidNpadButton_A);
     const bool bPressed = input::button_pressed(HidNpadButton_B);
@@ -61,6 +68,12 @@ void TitleSelectState::render()
     m_titleView->render(m_renderTarget, hasFocus);
     sm_controlGuide->render(sdl::Texture::Null, hasFocus);
     m_renderTarget->render(sdl::Texture::Null, 201, 91);
+}
+
+void TitleSelectState::sub_update()
+{
+    TitleSelectCommon::sub_update(); // keep the base behavior (control guide sub-update).
+    m_refreshPending = true;
 }
 
 void TitleSelectState::refresh() { m_titleView->refresh(); }
