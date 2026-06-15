@@ -29,6 +29,14 @@ ui::TitleView::TitleView(data::User *user)
 
 void ui::TitleView::update(bool hasFocus)
 {
+    // The remote listing loads on a background thread after startup. Once it's ready, rebuild the tiles once
+    // so the cloud badges show up (the grid was built before the listing existed).
+    if (!m_cloudMarked && remote::get_remote_storage() != nullptr)
+    {
+        TitleView::refresh();
+        m_cloudMarked = true;
+    }
+
     if (m_titleTiles.empty()) { return; }
 
     m_bounding->update(hasFocus);

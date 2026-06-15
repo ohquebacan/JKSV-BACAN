@@ -71,6 +71,9 @@ namespace ui
             /// @brief Vector of selection tiles.
             std::vector<ui::TitleTile> m_titleTiles{};
 
+            /// @brief Whether the tiles have been re-marked once the (async) remote listing became available.
+            bool m_cloudMarked{};
+
             /// @brief Bounding box rendered around the selected title.
             std::shared_ptr<ui::BoundingBox> m_bounding{};
 
