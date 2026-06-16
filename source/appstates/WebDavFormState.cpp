@@ -101,12 +101,13 @@ void WebDavFormState::render()
 
 void WebDavFormState::update_options()
 {
-    m_menu->edit_option(FIELD_ORIGIN, "Origin:      " + m_origin);
-    m_menu->edit_option(FIELD_BASEPATH, "Basepath:    " + m_basepath);
-    m_menu->edit_option(FIELD_USERNAME, "Usuario:     " + m_username);
-    m_menu->edit_option(FIELD_PASSWORD, "Contrasena:  " + (m_showPassword ? m_password : mask(m_password)));
-    m_menu->edit_option(TOGGLE_PASSWORD, m_showPassword ? "[Ocultar contrasena]" : "[Mostrar contrasena]");
-    m_menu->edit_option(SAVE, "Guardar y conectar");
+    m_menu->edit_option(FIELD_ORIGIN, std::string("Origin:      ") + m_origin);
+    m_menu->edit_option(FIELD_BASEPATH, std::string("Basepath:    ") + m_basepath);
+    m_menu->edit_option(FIELD_USERNAME, strings::tr("User:        ", "Usuario:     ") + m_username);
+    m_menu->edit_option(FIELD_PASSWORD, strings::tr("Password:    ", "Contrasena:  ") + (m_showPassword ? m_password : mask(m_password)));
+    m_menu->edit_option(TOGGLE_PASSWORD, m_showPassword ? strings::tr("[Hide password]", "[Ocultar contrasena]")
+                                                        : strings::tr("[Show password]", "[Mostrar contrasena]"));
+    m_menu->edit_option(SAVE, strings::tr("Save and connect", "Guardar y conectar"));
 }
 
 void WebDavFormState::edit_field(int field)
@@ -116,10 +117,10 @@ void WebDavFormState::edit_field(int field)
 
     switch (field)
     {
-        case FIELD_ORIGIN:   target = &m_origin;   header = "Origin (solo https://host, sin ruta)"; break;
-        case FIELD_BASEPATH: target = &m_basepath; header = "Basepath (ruta completa, sin / inicial)"; break;
-        case FIELD_USERNAME: target = &m_username; header = "Usuario"; break;
-        case FIELD_PASSWORD: target = &m_password; header = "Contrasena"; break;
+        case FIELD_ORIGIN:   target = &m_origin;   header = strings::tr("Origin (only https://host, no path)", "Origin (solo https://host, sin ruta)"); break;
+        case FIELD_BASEPATH: target = &m_basepath; header = strings::tr("Basepath (full path, no leading /)", "Basepath (ruta completa, sin / inicial)"); break;
+        case FIELD_USERNAME: target = &m_username; header = strings::tr("User", "Usuario"); break;
+        case FIELD_PASSWORD: target = &m_password; header = strings::tr("Password", "Contrasena"); break;
         default:             return;
     }
 
@@ -164,11 +165,11 @@ void WebDavFormState::save_and_connect()
 
     if (!wrote)
     {
-        ui::PopMessageManager::push_message(popTicks, "Error guardando webdav.json");
+        ui::PopMessageManager::push_message(popTicks, strings::tr("Error saving webdav.json", "Error guardando webdav.json"));
         return;
     }
 
-    ui::PopMessageManager::push_message(popTicks, "WebDAV guardado. Conectando...");
+    ui::PopMessageManager::push_message(popTicks, strings::tr("WebDAV saved. Connecting...", "WebDAV guardado. Conectando..."));
 
     // Same entry point used at startup; re-reads the config and rebuilds the storage handle.
     sys::threadpool::push_job(remote::initialize, nullptr);

@@ -67,7 +67,7 @@ BackupMenuState::BackupMenuState(data::User *user, data::TitleInfo *titleInfo, c
     if (m_titleInfo->name_is_broken() && remote::get_remote_storage())
     {
         ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS,
-                                            "Nombre danado: pulsa ZL para asociar su carpeta de la nube.");
+                                            strings::tr("Broken name: press ZL to link its cloud folder.", "Nombre danado: pulsa ZL para asociar su carpeta de la nube."));
     }
 }
 
@@ -235,6 +235,10 @@ void BackupMenuState::refresh()
 
 void BackupMenuState::reinitialize_remote()
 {
+    // Pick up a freshly-assigned custom folder name: recompute the local path and re-resolve the remote folder,
+    // exactly like opening the game does, so the menu shows the right content immediately (no need to re-enter).
+    m_directoryPath = config::get_working_directory() / m_titleInfo->get_path_safe_title();
+    BackupMenuState::ensure_target_directory();
     BackupMenuState::initialize_remote_storage();
     BackupMenuState::refresh();
 }

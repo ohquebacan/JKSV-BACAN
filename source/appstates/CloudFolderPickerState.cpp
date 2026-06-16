@@ -59,7 +59,7 @@ void CloudFolderPickerState::render()
     m_menu->render(m_renderTarget, hasFocus);
 
     sdl::render_rect_fill(sdl::Texture::Null, 0, 0, graphics::SCREEN_WIDTH, graphics::SCREEN_HEIGHT, colors::CLEAR_COLOR);
-    sdl::text::render(sdl::Texture::Null, 24, 48, 22, sdl::text::NO_WRAP, colors::WHITE, "Elige la carpeta de la nube de este juego:");
+    sdl::text::render(sdl::Texture::Null, 24, 48, 22, sdl::text::NO_WRAP, colors::WHITE, strings::tr("Pick this game's cloud folder:", "Elige la carpeta de la nube de este juego:"));
     m_renderTarget->render(sdl::Texture::Null, 201, 91);
     m_controlGuide->render(sdl::Texture::Null, hasFocus);
 }
@@ -71,12 +71,12 @@ void CloudFolderPickerState::build_list()
     remote::Storage *remote = remote::get_remote_storage();
     if (!remote)
     {
-        m_menu->add_option("No hay nube configurada.");
+        m_menu->add_option(strings::tr("No cloud configured.", "No hay nube configurada."));
         return;
     }
 
     // First option always lets the user type a brand-new name.
-    m_menu->add_option("[ + Crear nueva (escribir nombre) ]");
+    m_menu->add_option(strings::tr("[ + Create new (type a name) ]", "[ + Crear nueva (escribir nombre) ]"));
 
     // Then the cloud's existing root-level folders (in-memory listing; no network on the main thread).
     remote->return_to_root();
@@ -100,7 +100,7 @@ void CloudFolderPickerState::associate(int index)
 void CloudFolderPickerState::create_new()
 {
     std::array<char, 0x200> buffer = {0};
-    if (!keyboard::get_input(SwkbdType_Normal, "", "Nombre de la carpeta para este juego", buffer.data(), buffer.size() - 1))
+    if (!keyboard::get_input(SwkbdType_Normal, "", strings::tr("Folder name for this game", "Nombre de la carpeta para este juego"), buffer.data(), buffer.size() - 1))
     {
         return;
     }
@@ -109,7 +109,7 @@ void CloudFolderPickerState::create_new()
     const bool ok                = stringutil::sanitize_string_for_path(buffer.data(), safe.data(), safe.size());
     if (!ok || safe[0] == '\0')
     {
-        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, "Nombre invalido.");
+        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, strings::tr("Invalid name.", "Nombre invalido."));
         return;
     }
     CloudFolderPickerState::apply_name(safe.data());
@@ -124,7 +124,7 @@ void CloudFolderPickerState::apply_name(const char *name)
     config::save();
 
     ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS,
-                                        stringutil::get_formatted_string("Asociado a: %s", name));
+                                        stringutil::get_formatted_string(strings::tr("Linked to: %s", "Asociado a: %s"), name));
 
     if (m_spawning) { m_spawning->reinitialize_remote(); }
     BaseState::deactivate();

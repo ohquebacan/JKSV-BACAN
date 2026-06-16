@@ -119,7 +119,7 @@ void CloudDashboardState::render()
     // Opaque background so the menu underneath doesn't bleed through.
     sdl::render_rect_fill(sdl::Texture::Null, 0, 0, graphics::SCREEN_WIDTH, graphics::SCREEN_HEIGHT, colors::CLEAR_COLOR);
 
-    sdl::text::render(sdl::Texture::Null, 24, 48, 22, sdl::text::NO_WRAP, colors::WHITE, "Panel de sincronizacion (favoritos)");
+    sdl::text::render(sdl::Texture::Null, 24, 48, 22, sdl::text::NO_WRAP, colors::WHITE, strings::tr("Sync dashboard (favorites)", "Panel de sincronizacion (favoritos)"));
     m_renderTarget->render(sdl::Texture::Null, 201, 91);
     m_controlGuide->render(sdl::Texture::Null, hasFocus);
 }
@@ -154,20 +154,20 @@ void CloudDashboardState::build_rows()
             const std::string localKey = local_latest(titleInfo);
             const std::string cloudKey = cloud_latest(remote, titleInfo);
 
-            const char *tag = "[sin copias]";
+            const char *tag = strings::tr("[none]", "[sin copias]");
             if (!localKey.empty() && !cloudKey.empty())
             {
-                tag = localKey > cloudKey ? "[SUBIR]" : (cloudKey > localKey ? "[BAJAR]" : "[OK]");
+                tag = localKey > cloudKey ? strings::tr("[UP]", "[SUBIR]") : (cloudKey > localKey ? strings::tr("[DOWN]", "[BAJAR]") : "[OK]");
             }
-            else if (!localKey.empty()) { tag = "[SUBIR]"; }
-            else if (!cloudKey.empty()) { tag = "[BAJAR]"; }
+            else if (!localKey.empty()) { tag = strings::tr("[UP]", "[SUBIR]"); }
+            else if (!cloudKey.empty()) { tag = strings::tr("[DOWN]", "[BAJAR]"); }
 
             std::string name{titleInfo->get_title()};
             if (name.size() > 26) { name = name.substr(0, 25) + "~"; }
 
             std::string row = name;
             row.append(32 - std::min<size_t>(name.size(), 30), ' ');
-            row += "local:" + pretty_date(localKey) + "  nube:" + pretty_date(cloudKey) + "  " + tag;
+            row += "local:" + pretty_date(localKey) + strings::tr("  cloud:", "  nube:") + pretty_date(cloudKey) + "  " + tag;
 
             m_menu->add_option(row);
             ++favorites;
@@ -176,6 +176,6 @@ void CloudDashboardState::build_rows()
 
     if (favorites == 0)
     {
-        m_menu->add_option("No tienes juegos favoritos. Marca juegos con el corazon (Y) para verlos aqui.");
+        m_menu->add_option(strings::tr("No favorite games. Mark games with the heart (Y) to see them here.", "No tienes juegos favoritos. Marca juegos con el corazon (Y) para verlos aqui."));
     }
 }

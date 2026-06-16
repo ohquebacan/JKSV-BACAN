@@ -107,13 +107,13 @@ void CloudSetupState::initialize_menu()
 
     m_menu->add_option("WebDAV: Koofr");
     m_menu->add_option("WebDAV: Nextcloud");
-    m_menu->add_option("WebDAV: Otro (generico)");
-    m_menu->add_option("Google Drive (guia)");
-    m_menu->add_option("Ver / editar configuracion actual");
-    m_menu->add_option("Panel de sincronizacion (favoritos)");
-    m_menu->add_option("Subir favoritos a la nube");
-    m_menu->add_option("Bajar favoritos de la nube");
-    m_menu->add_option("Restaurar TODO de la nube (crea saves)");
+    m_menu->add_option(strings::tr("WebDAV: Other (generic)", "WebDAV: Otro (generico)"));
+    m_menu->add_option(strings::tr("Google Drive (guide)", "Google Drive (guia)"));
+    m_menu->add_option(strings::tr("View / edit current config", "Ver / editar configuracion actual"));
+    m_menu->add_option(strings::tr("Sync dashboard (favorites)", "Panel de sincronizacion (favoritos)"));
+    m_menu->add_option(strings::tr("Upload favorites to cloud", "Subir favoritos a la nube"));
+    m_menu->add_option(strings::tr("Download favorites from cloud", "Bajar favoritos de la nube"));
+    m_menu->add_option(strings::tr("Restore ALL from cloud (creates saves)", "Restaurar TODO de la nube (crea saves)"));
     m_menu->add_option(""); // Smart-sync row; filled by update_smart_label().
     m_menu->add_option(""); // Retention row; filled by update_retention_label().
     CloudSetupState::update_smart_label();
@@ -132,7 +132,8 @@ void CloudSetupState::update_smart_label()
 {
     const bool on = config::get_by_key(config::keys::SMART_SYNC) != 0;
     m_menu->edit_option(SMART_SYNC_TOGGLE,
-                        on ? "Smart-sync (protege el save mas nuevo): ON" : "Smart-sync (protege el save mas nuevo): OFF");
+                        on ? strings::tr("Smart-sync (protect the newer save): ON", "Smart-sync (protege el save mas nuevo): ON")
+                           : strings::tr("Smart-sync (protect the newer save): OFF", "Smart-sync (protege el save mas nuevo): OFF"));
 }
 
 void CloudSetupState::upload_favorites()
@@ -140,14 +141,14 @@ void CloudSetupState::upload_favorites()
     remote::Storage *remote = remote::get_remote_storage();
     if (!remote)
     {
-        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, "No hay nube configurada.");
+        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, strings::tr("No cloud configured.", "No hay nube configurada."));
         return;
     }
 
     auto data = std::make_shared<MainMenuState::DataStruct>();
     data::get_users(data->userList);
 
-    const char *query = "Subir la partida actual de tus juegos favoritos (corazon) a la nube?";
+    const char *query = strings::tr("Upload the current save of your favorite (heart) games to the cloud?", "Subir la partida actual de tus juegos favoritos (corazon) a la nube?");
     ConfirmProgress::create_push_fade(query, false, tasks::mainmenu::upload_favorites_remote, nullptr, data);
 }
 
@@ -156,7 +157,7 @@ void CloudSetupState::download_favorites()
     remote::Storage *remote = remote::get_remote_storage();
     if (!remote)
     {
-        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, "No hay nube configurada.");
+        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, strings::tr("No cloud configured.", "No hay nube configurada."));
         return;
     }
 
@@ -164,8 +165,7 @@ void CloudSetupState::download_favorites()
     data::get_users(data->userList);
 
     // Hold-to-confirm: this OVERWRITES local saves (a PRE-SYNC local backup is made first for safety).
-    const char *query = "SOBRESCRIBIR partidas locales de tus favoritos con la version de la nube? "
-                        "Se hace un backup local PRE-SYNC antes. Se salta si tu local es mas nuevo.";
+    const char *query = strings::tr("OVERWRITE local saves of your favorites with the cloud version? A local PRE-SYNC backup is made first. Skips if your local save is newer.", "SOBRESCRIBIR partidas locales de tus favoritos con la version de la nube? Se hace un backup local PRE-SYNC antes. Se salta si tu local es mas nuevo.");
     ConfirmProgress::create_push_fade(query, true, tasks::backup::download_favorites_remote, nullptr, data);
 }
 
@@ -174,15 +174,14 @@ void CloudSetupState::restore_all_from_cloud()
     remote::Storage *remote = remote::get_remote_storage();
     if (!remote)
     {
-        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, "No hay nube configurada.");
+        ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, strings::tr("No cloud configured.", "No hay nube configurada."));
         return;
     }
 
     auto data = std::make_shared<MainMenuState::DataStruct>();
 
     // Hold-to-confirm: creates save containers for games never launched and OVERWRITES existing saves.
-    const char *query = "Restaurar TODA tu nube en esta consola? Crea las partidas de juegos instalados que nunca "
-                        "abriste y SOBRESCRIBE las existentes (con backup PRE-SYNC). Juegos no instalados se omiten.";
+    const char *query = strings::tr("Restore your ENTIRE cloud on this console? Creates saves for installed games you never opened and OVERWRITES existing ones (with PRE-SYNC backup). Non-installed games are skipped.", "Restaurar TODA tu nube en esta consola? Crea las partidas de juegos instalados que nunca abriste y SOBRESCRIBE las existentes (con backup PRE-SYNC). Juegos no instalados se omiten.");
     ConfirmProgress::create_push_fade(query, true, tasks::backup::restore_all_from_cloud, nullptr, data);
 }
 
@@ -198,8 +197,8 @@ void CloudSetupState::cycle_retention()
 void CloudSetupState::update_retention_label()
 {
     const uint8_t keep      = config::get_by_key(config::keys::BACKUP_RETENTION);
-    const std::string label = keep == 0 ? "Auto-limpieza de copias: Off"
-                                        : "Auto-limpieza de copias: mantener " + std::to_string(keep);
+    const std::string label = keep == 0 ? std::string(strings::tr("Auto-cleanup of backups: Off", "Auto-limpieza de copias: Off"))
+                                        : strings::tr("Auto-cleanup of backups: keep ", "Auto-limpieza de copias: mantener ") + std::to_string(keep);
     m_menu->edit_option(RETENTION, label);
 }
 
@@ -224,8 +223,8 @@ void CloudSetupState::show_current_config()
     if (!fslib::file_exists(remote::PATH_WEBDAV_CONFIG))
     {
         const char *message = fslib::file_exists(remote::PATH_GOOGLE_DRIVE_CONFIG)
-                                  ? "Google Drive configurado (client_secret.json presente)."
-                                  : "No hay WebDAV configurado.";
+                                  ? strings::tr("Google Drive configured (client_secret.json present).", "Google Drive configurado (client_secret.json presente).")
+                                  : strings::tr("No WebDAV configured.", "No hay WebDAV configurado.");
         ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS, message);
         return;
     }

@@ -19,6 +19,9 @@ namespace
     // This is the actual map where the strings are.
     std::map<std::pair<std::string, int>, std::string> s_stringMap;
 
+    // Set when the loaded UI language is Spanish, so BACÁN's added strings can show in EN or ES.
+    bool s_isSpanish = false;
+
     constexpr std::array<std::string_view, SetLanguage_Total> PATH_ARRAY = {"JA.json.z",
                                                                             "ENUS.json.z",
                                                                             "FR.json.z",
@@ -109,6 +112,10 @@ const char *strings::get_by_name(std::string_view name, int index) noexcept
     return findPair->second.c_str();
 }
 
+bool strings::is_spanish() noexcept { return s_isSpanish; }
+
+const char *strings::tr(const char *english, const char *spanish) noexcept { return s_isSpanish ? spanish : english; }
+
 static fslib::Path get_file_path()
 {
     static constexpr std::string_view PATH_BASE = "romfs:/Text";
@@ -121,7 +128,11 @@ static fslib::Path get_file_path()
     const bool codeError    = error::libnx(setGetLanguageCode(&languageCode));
     const bool langError    = !codeError && error::libnx(setMakeLanguage(languageCode, &language));
     if (forceEnglish || codeError || langError) { returnPath /= PATH_ARRAY[SetLanguage_ENUS]; }
-    else { returnPath /= PATH_ARRAY[language]; }
+    else
+    {
+        returnPath /= PATH_ARRAY[language];
+        s_isSpanish = (language == SetLanguage_ES || language == SetLanguage_ES419);
+    }
 
     return returnPath;
 }

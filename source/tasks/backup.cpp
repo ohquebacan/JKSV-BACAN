@@ -700,7 +700,7 @@ void tasks::backup::download_favorites_remote(sys::threadpool::JobData taskData)
 
     remote->return_to_root();
 
-    std::string report = stringutil::get_formatted_string("Favoritos bajados: %d  -  saltados: %d", restored, skipped);
+    std::string report = stringutil::get_formatted_string(strings::tr("Favorites downloaded: %d  -  skipped: %d", "Favoritos bajados: %d  -  saltados: %d"), restored, skipped);
     ui::PopMessageManager::push_message(POP_TICKS, report);
 
     task->complete();
@@ -807,7 +807,7 @@ void tasks::backup::restore_all_from_cloud(sys::threadpool::JobData taskData)
     }
     if (error::is_null(targetUser))
     {
-        ui::PopMessageManager::push_message(POP_TICKS, "No hay cuenta de usuario para restaurar.");
+        ui::PopMessageManager::push_message(POP_TICKS, strings::tr("No user account to restore to.", "No hay cuenta de usuario para restaurar."));
         TASK_FINISH_RETURN(task);
     }
 
@@ -888,7 +888,7 @@ void tasks::backup::restore_all_from_cloud(sys::threadpool::JobData taskData)
         else { ++otherSkips; }
     }
 
-    std::string report = stringutil::get_formatted_string("Restaurados: %d (saves creados: %d)  -  no instalados: %d",
+    std::string report = stringutil::get_formatted_string(strings::tr("Restored: %d (saves created: %d)  -  not installed: %d", "Restaurados: %d (saves creados: %d)  -  no instalados: %d"),
                                                           restored,
                                                           createdSaves,
                                                           notInstalled);
