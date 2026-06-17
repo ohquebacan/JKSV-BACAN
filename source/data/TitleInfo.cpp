@@ -7,10 +7,55 @@
 #include "logging/logger.hpp"
 #include "stringutil.hpp"
 
+#include <array>
 #include <cstring>
+#include <zlib.h>
 
 namespace
 {
+    // Newer game updates (Breath of the Wild 1.9.0+, Super Mario Party Jamboree, ...) added a 17th+
+    // language. To stay backwards-compatible the per-language title/publisher block is now packed into a
+    // raw-DEFLATE blob at the very start of control.nacp, while everything past 0x3000 is left intact.
+    // libnx doesn't decompress it yet (switchbrew/libnx#714), so nacpGetLanguageEntry() reads the
+    // compressed bytes as a garbage title (this is what made games show up under a numeric/broken name and
+    // froze the renderer). Detect the format — the exact check HOS itself uses — and restore the classic
+    // 16-language block in place so the rest of the code path works unchanged.
+    //
+    // Compressed layout:
+    //   [0x0 .. 0x2)    uint16 little-endian: size of the compressed blob
+    //   [0x2 .. 0x2+n)  raw DEFLATE (wbits -15) -> 0x6000 bytes = 32 entries * 0x300
+    //   byte 0x3215     == 1 when compressed (0 = classic uncompressed 16-language NACP)
+    bool decompress_nacp_language_names(NacpStruct *nacp) noexcept
+    {
+        if (!nacp) { return false; }
+        uint8_t *raw = reinterpret_cast<uint8_t *>(nacp);
+
+        constexpr size_t FLAG_OFFSET = 0x3215;
+        if (raw[FLAG_OFFSET] != 1) { return false; } // classic uncompressed NACP, nothing to do
+
+        const uint16_t compressedSize = static_cast<uint16_t>(raw[0]) | (static_cast<uint16_t>(raw[1]) << 8);
+        if (compressedSize == 0) { return false; }
+
+        constexpr size_t DECOMPRESSED_SIZE = 0x6000;          // 32 * sizeof(NacpLanguageEntry)
+        const size_t classicLangBlock      = sizeof(nacp->lang); // 16 * 0x300 = 0x3000
+
+        std::array<uint8_t, DECOMPRESSED_SIZE> out{};
+
+        z_stream strm{};
+        if (inflateInit2(&strm, -15) != Z_OK) { return false; }
+        strm.next_in   = raw + 2;
+        strm.avail_in  = compressedSize;
+        strm.next_out  = out.data();
+        strm.avail_out = static_cast<uInt>(out.size());
+        const int ret = inflate(&strm, Z_FINISH);
+        inflateEnd(&strm);
+        if (ret != Z_STREAM_END) { return false; } // failed/partial inflate -> leave NACP untouched
+
+        // Overwrite the compressed block with the first 16 (classic) language entries.
+        std::memcpy(raw, out.data(), classicLangBlock);
+        return true;
+    }
+
     // Some games ship a NACP name with invalid UTF-8 bytes. JKSV's text renderer can hang forever on those,
     // so replace any malformed byte sequence in-place with '?' (result is always valid UTF-8).
     // Returns true if anything was replaced (i.e. the name was broken).
@@ -75,6 +120,8 @@ data::TitleInfo::TitleInfo(uint64_t applicationID) noexcept
                                                                                 &m_data,
                                                                                 SIZE_CTRL_DATA,
                                                                                 &controlSize));
+    // Restore real per-language names if this game uses the new compressed NACP (switchbrew/libnx#714).
+    if (!isSystem && !getError) { decompress_nacp_language_names(&m_data.nacp); }
     const bool entryError = !getError && error::libnx(nacpGetLanguageEntry(&m_data.nacp, &m_entry));
     if (isSystem || getError)
     {
@@ -99,6 +146,8 @@ data::TitleInfo::TitleInfo(uint64_t applicationID, NsApplicationControlData &con
     , m_data(controlData)
     , m_hasData(true)
 {
+    // Restore real per-language names if this game uses the new compressed NACP (switchbrew/libnx#714).
+    decompress_nacp_language_names(&m_data.nacp);
     const bool entryError = error::libnx(nacpGetLanguageEntry(&m_data.nacp, &m_entry));
     if (entryError)
     {
