@@ -67,7 +67,7 @@ BackupMenuState::BackupMenuState(data::User *user, data::TitleInfo *titleInfo, c
     if (m_titleInfo->name_is_broken() && remote::get_remote_storage())
     {
         ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS,
-                                            strings::tr("Broken name: press ZL to link its cloud folder.", "Nombre danado: pulsa ZL para asociar su carpeta de la nube."));
+                                            strings::tr("Broken name: hold ZL to link its cloud folder.", "Nombre danado: manten ZL 1s para asociar su carpeta de la nube."));
     }
 }
 
@@ -103,7 +103,14 @@ void BackupMenuState::update()
     const bool yPressed  = input::button_pressed(HidNpadButton_Y);
     const bool zrPressed = input::button_pressed(HidNpadButton_ZR);
     const bool lPressed  = input::button_pressed(HidNpadButton_L);
-    const bool zlPressed = input::button_pressed(HidNpadButton_ZL);
+
+    // ZL must be HELD ~1 second to open the cloud-folder picker, so it never pops up by accident. The picker
+    // works for ANY game (not just broken-named ones), so the user can re-assign or clear a previous
+    // assignment now that decompressed NACPs expose the real name.
+    static constexpr int ZL_HOLD_FRAMES = 60; // ~1 second at 60 fps
+    const bool zlHeld                   = input::button_held(HidNpadButton_ZL) && remote::get_remote_storage();
+    if (zlHeld) { ++m_zlHoldFrames; }
+    else { m_zlHoldFrames = 0; }
 
     // Conditions.
     const bool newSelected     = selected == 0;
@@ -113,9 +120,7 @@ void BackupMenuState::update()
     const bool deleteBackup    = xPressed && !newSelected;
     const bool uploadBackup    = zrPressed && !newSelected;
     const bool reloadRemote    = lPressed && remote::get_remote_storage();
-    // ZL opens the cloud-folder picker for ANY game (not just broken-named ones), so the user can re-assign
-    // or clear a previous assignment now that decompressed NACPs expose the real name.
-    const bool pickCloudFolder = zlPressed && remote::get_remote_storage();
+    const bool pickCloudFolder = m_zlHoldFrames == ZL_HOLD_FRAMES; // fires once on the frame it crosses 1s
     const bool popEmpty        = aPressed && !m_saveHasData;
 
     if (newBackup) { BackupMenuState::name_and_create_backup(); }

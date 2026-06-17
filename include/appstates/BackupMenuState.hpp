@@ -135,6 +135,9 @@ class BackupMenuState final : public BaseState
         /// @brief Variable that saves whether or not the filesystem has data in it.
         bool m_saveHasData{};
 
+        /// @brief Frames ZL has been held; the cloud-folder picker opens once this reaches ~1 second.
+        int m_zlHoldFrames{};
+
         /// @brief Data struct passed to functions.
         std::shared_ptr<BackupMenuState::DataStruct> m_dataStruct{};
 
