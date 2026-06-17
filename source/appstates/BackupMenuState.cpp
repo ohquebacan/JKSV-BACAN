@@ -113,7 +113,9 @@ void BackupMenuState::update()
     const bool deleteBackup    = xPressed && !newSelected;
     const bool uploadBackup    = zrPressed && !newSelected;
     const bool reloadRemote    = lPressed && remote::get_remote_storage();
-    const bool pickCloudFolder = zlPressed && m_titleInfo->name_is_broken() && remote::get_remote_storage();
+    // ZL opens the cloud-folder picker for ANY game (not just broken-named ones), so the user can re-assign
+    // or clear a previous assignment now that decompressed NACPs expose the real name.
+    const bool pickCloudFolder = zlPressed && remote::get_remote_storage();
     const bool popEmpty        = aPressed && !m_saveHasData;
 
     if (newBackup) { BackupMenuState::name_and_create_backup(); }

@@ -39,8 +39,11 @@ class CloudFolderPickerState final : public BaseState
         sdl::SharedTexture m_renderTarget{};
         std::shared_ptr<ui::ControlGuide> m_controlGuide{};
 
-        /// @brief Cloud folder names, parallel to the menu options.
+        /// @brief Cloud folder names, parallel to the existing-folder menu options.
         std::vector<std::string> m_folderNames{};
+
+        /// @brief True when a "use the game's real name" row is shown first (only if a custom path exists).
+        bool m_hasClearOption{};
 
         void build_list();
         void associate(int index);
@@ -50,4 +53,7 @@ class CloudFolderPickerState final : public BaseState
 
         /// @brief Applies a folder name as this game's custom path and refreshes.
         void apply_name(const char *name);
+
+        /// @brief Drops the custom path so the game reverts to its real, derived name, then refreshes.
+        void clear_assignment();
 };

@@ -95,6 +95,10 @@ namespace data
             /// @param newPathSafe Buffer containing the new safe path to use.
             void set_path_safe_title(const char *newPathSafe) noexcept;
 
+            /// @brief Recomputes the path-safe title from the real game name / custom path. Call after a
+            /// custom path is added or removed so the in-memory title reflects the change immediately.
+            void refresh_path_safe_title() noexcept;
+
             /// @brief Loads the icon from the nacp.
             void load_icon() override;
 

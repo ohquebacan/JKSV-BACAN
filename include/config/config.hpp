@@ -77,6 +77,10 @@ namespace config
     /// @param customPath Path to assign to the output.
     void add_custom_path(uint64_t applicationID, std::string_view customPath);
 
+    /// @brief Removes the custom output path for the title (reverts it to its real, derived name).
+    /// @param applicationID Application ID of title to clear.
+    void remove_custom_path(uint64_t applicationID);
+
     /// @brief Searches to see if the application ID passed has a custom output path.
     /// @param applicationID Application ID to check.
     /// @return True if it does. False if it doesn't.

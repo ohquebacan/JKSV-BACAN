@@ -79,6 +79,9 @@ namespace config
             /// @brief Adds a new output path.
             void add_custom_path(uint64_t applicationID, std::string_view newPath);
 
+            /// @brief Removes the custom output path for the application ID, if present.
+            void remove_custom_path(uint64_t applicationID);
+
             /// @brief Gets the custom output path of the applicationID passed.
             void get_custom_path(uint64_t applicationID, char *buffer, size_t bufferSize);
 

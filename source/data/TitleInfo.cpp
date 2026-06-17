@@ -269,6 +269,8 @@ void data::TitleInfo::set_path_safe_title(const char *newPathSafe) noexcept
     std::memcpy(m_pathSafeTitle, newPathSafe, length);
 }
 
+void data::TitleInfo::refresh_path_safe_title() noexcept { TitleInfo::get_create_path_safe_title(); }
+
 void data::TitleInfo::load_icon()
 {
     // This is taken from the NacpStruct.

@@ -177,6 +177,11 @@ void config::ConfigContext::add_custom_path(uint64_t applicationID, std::string_
     ConfigContext::save_custom_paths();
 }
 
+void config::ConfigContext::remove_custom_path(uint64_t applicationID)
+{
+    if (m_paths.erase(applicationID) > 0) { ConfigContext::save_custom_paths(); }
+}
+
 void config::ConfigContext::get_custom_path(uint64_t applicationID, char *buffer, size_t bufferSize)
 {
     const auto findPath = m_paths.find(applicationID);

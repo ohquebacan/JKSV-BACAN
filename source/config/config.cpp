@@ -62,6 +62,8 @@ void config::add_custom_path(uint64_t applicationID, std::string_view customPath
     s_context.add_custom_path(applicationID, customPath);
 }
 
+void config::remove_custom_path(uint64_t applicationID) { s_context.remove_custom_path(applicationID); }
+
 bool config::has_custom_path(uint64_t applicationID) noexcept { return s_context.has_custom_path(applicationID); }
 
 void config::get_custom_path(uint64_t applicationID, char *pathOut, size_t pathOutSize)

@@ -42,9 +42,17 @@ void CloudFolderPickerState::update()
 
     if (input::button_pressed(HidNpadButton_A))
     {
-        const int selected = m_menu->get_selected();
-        if (selected == 0) { CloudFolderPickerState::create_new(); }       // "Crear nueva"
-        else { CloudFolderPickerState::associate(selected - 1); }          // pick an existing folder
+        int row = m_menu->get_selected();
+
+        // Optional first row clears the assignment (only present when a custom path exists).
+        if (m_hasClearOption)
+        {
+            if (row == 0) { CloudFolderPickerState::clear_assignment(); return; }
+            row -= 1; // shift so the rest of the rows map the same as without the clear option
+        }
+
+        if (row == 0) { CloudFolderPickerState::create_new(); } // "[ + Create new ]"
+        else { CloudFolderPickerState::associate(row - 1); }     // pick an existing folder
     }
     else if (input::button_pressed(HidNpadButton_B)) { BaseState::deactivate(); }
 }
@@ -73,6 +81,14 @@ void CloudFolderPickerState::build_list()
     {
         m_menu->add_option(strings::tr("No cloud configured.", "No hay nube configurada."));
         return;
+    }
+
+    // If this game already has a manual assignment, offer to drop it and go back to the real game name
+    // (useful now that decompressed NACPs expose the correct name for games that were once "broken").
+    if (config::has_custom_path(m_titleInfo->get_application_id()))
+    {
+        m_hasClearOption = true;
+        m_menu->add_option(strings::tr("[ Use this game's real name ]", "[ Usar el nombre real del juego ]"));
     }
 
     // First option always lets the user type a brand-new name.
@@ -125,6 +141,23 @@ void CloudFolderPickerState::apply_name(const char *name)
 
     ui::PopMessageManager::push_message(ui::PopMessageManager::DEFAULT_TICKS,
                                         stringutil::get_formatted_string(strings::tr("Linked to: %s", "Asociado a: %s"), name));
+
+    if (m_spawning) { m_spawning->reinitialize_remote(); }
+    BaseState::deactivate();
+}
+
+void CloudFolderPickerState::clear_assignment()
+{
+    // Drop the manual mapping and recompute the title from the real NACP name (the same logic JKSV uses
+    // for any normal game). reinitialize_remote() then re-points local + cloud at the real-name folder.
+    config::remove_custom_path(m_titleInfo->get_application_id());
+    config::save();
+    m_titleInfo->refresh_path_safe_title();
+
+    ui::PopMessageManager::push_message(
+        ui::PopMessageManager::DEFAULT_TICKS,
+        stringutil::get_formatted_string(strings::tr("Using real name: %s", "Usando nombre real: %s"),
+                                         m_titleInfo->get_path_safe_title()));
 
     if (m_spawning) { m_spawning->reinitialize_remote(); }
     BaseState::deactivate();
