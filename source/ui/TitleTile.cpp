@@ -72,13 +72,26 @@ void ui::TitleTile::render(sdl::SharedTexture &target, int x, int y)
     }
     if (m_hasLocalBackup)
     {
-        // Solid square badge in the bottom-right corner = this game has a LOCAL backup on the SD card.
-        // Distinct corner + colour from the cloud badge so a game with both shows two separate markers.
+        // Local-backup badge: a green square with a white check in the bottom-right corner. Distinct corner
+        // and colour from the cloud badge so a game with both backups shows two separate markers.
+        static constexpr sdl::Color LOCAL_GREEN = {0x33CC55FF};
         const int badge  = width / 5;
         const int badgeX = renderX + width - badge - 5;
         const int badgeY = renderY + height - badge - 5;
-        sdl::render_rect_fill(target, badgeX - 2, badgeY - 2, badge + 4, badge + 4, colors::WHITE); // outline
-        sdl::render_rect_fill(target, badgeX, badgeY, badge, badge, colors::GREEN);                 // fill
+
+        sdl::render_rect_fill(target, badgeX - 2, badgeY - 2, badge + 4, badge + 4, colors::WHITE); // border
+        sdl::render_rect_fill(target, badgeX, badgeY, badge, badge, LOCAL_GREEN);                   // fill
+
+        // White check: two strokes (down to the bottom vertex, then up to the top-right). Drawn a few times
+        // with a 1px offset so it stays legible at tile size.
+        const int ax = badgeX + badge * 24 / 100, ay = badgeY + badge * 52 / 100;
+        const int bx = badgeX + badge * 42 / 100, by = badgeY + badge * 70 / 100;
+        const int cx = badgeX + badge * 78 / 100, cy = badgeY + badge * 28 / 100;
+        for (int t = 0; t < 3; t++)
+        {
+            sdl::render_line(target, ax, ay + t, bx, by + t, colors::WHITE);
+            sdl::render_line(target, bx, by + t, cx, cy + t, colors::WHITE);
+        }
     }
 }
 
