@@ -2,6 +2,7 @@
 
 #include "config/config.hpp"
 #include "error.hpp"
+#include "fslib.hpp"
 #include "graphics/colors.hpp"
 #include "input.hpp"
 #include "logging/logger.hpp"
@@ -120,7 +121,19 @@ void ui::TitleView::refresh()
             hasCloudBackup = remote->has_backups_for(folder);
         }
 
-        m_titleTiles.emplace_back(isFavorite, i, icon, hasCloudBackup);
+        // Mark the tile if this game has a non-empty local backup folder on the SD card. (The folder can exist
+        // but be empty just from opening the game, so an entry count > 0 is what actually counts as a backup.)
+        bool hasLocalBackup = false;
+        {
+            const fslib::Path localDir{config::get_working_directory() / titleInfo->get_path_safe_title()};
+            if (fslib::directory_exists(localDir))
+            {
+                fslib::Directory localListing{localDir, false};
+                hasLocalBackup = localListing.is_open() && localListing.get_count() > 0;
+            }
+        }
+
+        m_titleTiles.emplace_back(isFavorite, i, icon, hasCloudBackup, hasLocalBackup);
     }
 
     const int tileCount = m_titleTiles.size() - 1;

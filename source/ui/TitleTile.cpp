@@ -11,7 +11,7 @@ namespace
 
 //                      ---- Construction ----
 
-ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon, bool hasCloudBackup)
+ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon, bool hasCloudBackup, bool hasLocalBackup)
     : m_transition(0,
                    0,
                    UNSELECTED_WIDTH_HEIGHT,
@@ -23,6 +23,7 @@ ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon, bo
                    m_transition.DEFAULT_THRESHOLD)
     , m_isFavorite(isFavorite)
     , m_hasCloudBackup(hasCloudBackup)
+    , m_hasLocalBackup(hasLocalBackup)
     , m_index(index)
     , m_icon(icon) {};
 
@@ -68,6 +69,16 @@ void ui::TitleTile::render(sdl::SharedTexture &target, int x, int y)
             const int badgeY = renderY + 4;
             sm_cloudIcon->render_stretched(target, badgeX, badgeY, badge, badge);
         }
+    }
+    if (m_hasLocalBackup)
+    {
+        // Solid square badge in the bottom-right corner = this game has a LOCAL backup on the SD card.
+        // Distinct corner + colour from the cloud badge so a game with both shows two separate markers.
+        const int badge  = width / 5;
+        const int badgeX = renderX + width - badge - 5;
+        const int badgeY = renderY + height - badge - 5;
+        sdl::render_rect_fill(target, badgeX - 2, badgeY - 2, badge + 4, badge + 4, colors::WHITE); // outline
+        sdl::render_rect_fill(target, badgeX, badgeY, badge, badge, colors::GREEN);                 // fill
     }
 }
 

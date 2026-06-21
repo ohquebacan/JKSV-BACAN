@@ -12,7 +12,12 @@ namespace ui
             /// @param isFavorite Whether the title is a favorite and should have the little heart rendered.
             /// @param icon Shared texture pointer to the icon.
             /// @param hasCloudBackup Whether the title has a backup on the remote, for the cloud badge.
-            TitleTile(bool isFavorite, int index, sdl::SharedTexture icon, bool hasCloudBackup = false);
+            /// @param hasLocalBackup Whether the title has a backup on the SD card, for the local badge.
+            TitleTile(bool isFavorite,
+                      int index,
+                      sdl::SharedTexture icon,
+                      bool hasCloudBackup = false,
+                      bool hasLocalBackup = false);
 
             /// @brief Runs the update routine.
             /// @param isSelected Whether or not the tile is selected and needs to expand.
@@ -44,6 +49,9 @@ namespace ui
 
             /// @brief Whether the title has a backup on the remote storage.
             bool m_hasCloudBackup{};
+
+            /// @brief Whether the title has a backup on the SD card (local working directory).
+            bool m_hasLocalBackup{};
 
             int m_index{};
 
