@@ -49,6 +49,9 @@ namespace remote
             /// @brief Returns the parent to the root directory.
             void return_to_root();
 
+            /// @brief Returns true if the current directory is the root (no specific folder has been entered).
+            bool is_at_root() const noexcept;
+
             /// @brief This allows the root to be set to something other than what it originally was at construction.
             /// @param root Item to be used as the new root.
             void set_root_directory(const remote::Item *root);

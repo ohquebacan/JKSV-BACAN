@@ -147,7 +147,12 @@ bool remote::WebDav::create_directory(std::string_view name)
     if (!curl::perform(m_curl)) { return false; }
 
     const long code = curl::get_response_code(m_curl);
-    if (code != 201)
+    // 201 = created. 405/301 = the collection already exists on the server (our in-memory listing was just
+    // stale, e.g. opened before the async boot-time load finished). Treat "already exists" as success so the
+    // caller can enter the folder instead of bailing out with the current directory stuck at the root.
+    const bool created       = code == 201;
+    const bool alreadyExists = code == 405 || code == 301;
+    if (!created && !alreadyExists)
     {
         logger::log(STRING_CREATE_DIR_ERROR, name.data());
         return false;
@@ -156,7 +161,14 @@ bool remote::WebDav::create_directory(std::string_view name)
     // This is the ID string so we can make WebDav work within the same framework as Google Drive.
     // m_parent already ends with a '/', so don't insert another one (avoids "//" paths some servers reject).
     std::string id = m_parent + escapedName + "/";
-    m_list.emplace_back(name, id, m_parent, 0, true);
+
+    // Re-register the folder only if it isn't already cached (the "already exists" path can race the cache).
+    auto is_same = [&](const remote::Item &item)
+    { return item.is_directory() && item.get_parent_id() == m_parent && item.get_name() == name; };
+    if (std::find_if(m_list.begin(), m_list.end(), is_same) == m_list.end())
+    {
+        m_list.emplace_back(name, id, m_parent, 0, true);
+    }
 
     return true;
 }

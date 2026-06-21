@@ -199,8 +199,10 @@ void BackupMenuState::refresh()
     sm_backupMenu->add_option(optionNew);
     m_menuEntries.push_back({MenuEntryType::Null, 0});
 
-    // Remote->Local.
-    if (remote)
+    // Remote->Local. Only list the remote when we actually entered this game's folder; if resolution left us
+    // at the root we must NOT show the root listing (that would present every game's backups as this one's,
+    // risking a wrong-game restore). In that case fall through to local-only.
+    if (remote && !remote->is_at_root())
     {
         const std::string_view prefix = remote->get_prefix();
         remote->get_directory_listing(m_remoteListing);
@@ -327,11 +329,19 @@ void BackupMenuState::initialize_remote_storage()
 
     const bool supportsUtf8            = remote->supports_utf8();
     const std::string_view remoteTitle = supportsUtf8 ? m_titleInfo->get_title() : m_titleInfo->get_path_safe_title();
-    const bool remoteDirExists         = remote->directory_exists(remoteTitle);
-    // Re-query the server for this game's folder so backups another console deleted don't linger as phantoms.
-    if (remoteDirExists) { remote->reload_folder(remoteTitle); }
-    const bool remoteDirCreated        = !remoteDirExists && remote->create_directory(remoteTitle);
-    if (!remoteDirExists && !remoteDirCreated) { return; }
+
+    // Resolve this game's folder. The in-memory listing can be stale right after boot (it loads async), so a
+    // cache miss doesn't mean the folder is absent. create_directory() settles it against the server: it makes
+    // the folder, or — if the server reports it already exists — re-registers it in the cache. Either way we
+    // get a real folder to enter, instead of bailing out with the directory stuck at the root (which would
+    // then list EVERY game's backups as if they belonged to this one).
+    bool resolved = remote->directory_exists(remoteTitle);
+    if (!resolved) { resolved = remote->create_directory(remoteTitle); }
+    if (!resolved) { return; }
+
+    // Re-pull this folder's children so we show its real contents even when the cache entry was just
+    // synthesized (stale cache), and so backups another console deleted don't linger as phantoms.
+    remote->reload_folder(remoteTitle);
 
     const remote::Item *remoteDir = remote->get_directory_by_name(remoteTitle);
     if (!remoteDir) { return; }

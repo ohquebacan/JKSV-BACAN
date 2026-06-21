@@ -23,6 +23,8 @@ bool remote::Storage::directory_exists(std::string_view name) const noexcept
 
 void remote::Storage::return_to_root() { m_parent = m_root; }
 
+bool remote::Storage::is_at_root() const noexcept { return m_parent == m_root; }
+
 bool remote::Storage::has_backups_for(std::string_view name) const noexcept
 {
     // Find the title's folder at the root (independent of the current directory).
