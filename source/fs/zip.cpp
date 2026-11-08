@@ -1,5 +1,7 @@
 #include "fs/zip.hpp"
 
+#include <zlib.h>
+
 #include "BufferQueue.hpp"
 #include "config/config.hpp"
 #include "error.hpp"
@@ -220,4 +222,35 @@ bool fs::zip_has_contents(const fslib::Path &zipPath)
         if (unzip.get_filename() != fs::NAME_SAVE_META) { return true; }
     } while (unzip.next_file());
     return false;
+}
+
+int fs::verify_zip_against_directory(fs::MiniUnzip &source, const fslib::Path &dest)
+{
+    if (!source.reset()) { return 0; }
+
+    int distintos = 0;
+    std::vector<unsigned char> bufer(0x40000);
+    do {
+        if (source.get_filename() == fs::NAME_SAVE_META || source.is_directory()) { continue; }
+
+        const fslib::Path ruta{dest / source.get_filename()};
+        fslib::File archivo{ruta, FsOpenMode_Read};
+        if (!archivo.is_open())
+        {
+            ++distintos;
+            continue;
+        }
+
+        uLong crc        = crc32(0L, Z_NULL, 0);
+        uint64_t tamano  = 0;
+        ssize_t leidos{};
+        while ((leidos = archivo.read(bufer.data(), bufer.size())) > 0)
+        {
+            crc = crc32(crc, bufer.data(), static_cast<uInt>(leidos));
+            tamano += static_cast<uint64_t>(leidos);
+        }
+        if (leidos < 0 || tamano != source.get_uncompressed_size() || static_cast<uint32_t>(crc) != source.get_crc()) { ++distintos; }
+    } while (source.next_file());
+
+    return distintos;
 }

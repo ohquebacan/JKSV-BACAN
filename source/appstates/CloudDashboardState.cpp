@@ -29,9 +29,9 @@ namespace
     // "2026-06-15_10-00-00" -> "06-15 10:00"; empty key -> "--".
     std::string pretty_date(const std::string &key)
     {
-        if (key.size() < 16) { return "--"; }
-        std::string out = key.substr(5, 5) + " " + key.substr(11, 2) + ":" + key.substr(14, 2);
-        return out;
+        if (key.size() < 16) { return strings::tr("none", "ninguno"); }
+        // YYYY-MM-DD_HH-MM-SS -> dd/mm/aaaa · hh:mm
+        return key.substr(8, 2) + "/" + key.substr(5, 2) + "/" + key.substr(0, 4) + "  ·  " + key.substr(11, 2) + ":" + key.substr(14, 2);
     }
 
     // Newest local backup date for a game's working-directory folder.
@@ -89,7 +89,7 @@ namespace
 
 CloudDashboardState::CloudDashboardState()
     : m_renderTarget(sdl::TextureManager::load(DASHBOARD_TARGET, 1080, 555, SDL_TEXTUREACCESS_TARGET))
-    , m_controlGuide(ui::ControlGuide::create(strings::get_by_name(strings::names::CONTROL_GUIDES, 3)))
+    , m_controlGuide(ui::ControlGuide::create(strings::tr("\uE0E1 Back", "\uE0E1 Atrás")))
 {
     m_menu = ui::Menu::create(16, 10, 1040, 23, 555);
     CloudDashboardState::build_rows();
@@ -113,18 +113,19 @@ void CloudDashboardState::render()
 {
     const bool hasFocus = BaseState::has_focus();
 
-    m_renderTarget->clear(colors::TRANSPARENT);
-    m_menu->render(m_renderTarget, hasFocus);
-
-    // Opaque background so the menu underneath doesn't bleed through.
-    sdl::render_rect_fill(sdl::Texture::Null, 0, 0, graphics::SCREEN_WIDTH, graphics::SCREEN_HEIGHT, colors::CLEAR_COLOR);
-
-    sdl::text::render(sdl::Texture::Null, 24, 48, 22, sdl::text::NO_WRAP, colors::WHITE, strings::tr("Sync dashboard (favorites)", "Panel de sincronizacion (favoritos)"));
-    m_renderTarget->render(sdl::Texture::Null, 201, 91);
+    ui::lista::marco(strings::tr("Favorites in the cloud", "Favoritos en la nube"));
+    if (m_filas.empty())
+    {
+        // Sin favoritos: una tarjeta que explica como marcarlos.
+        sdl::render_rect_fill(sdl::Texture::Null, 340, 250, 740, 170, colors::DIALOG_DARK);
+        sdl::text::render(sdl::Texture::Null, 380, 285, 26, 660, colors::WHITE, strings::tr("You have no favorite games yet", "Aún no tienes juegos favoritos"));
+        sdl::text::render(sdl::Texture::Null, 380, 335, 19, 660, colors::DIALOG_LIGHT,
+                          strings::tr("In the game grid, press Y on a game to mark it with the heart. Your favorites show up here with their cloud status.",
+                                      "En la cuadrícula de juegos, pulsa Y sobre uno para marcarlo con el corazón. Aquí verás tus favoritos y su estado en la nube."));
+    }
+    else { ui::lista::dibujar(m_filas, m_menu->get_selected(), m_desplazamiento, hasFocus); }
     m_controlGuide->render(sdl::Texture::Null, hasFocus);
 }
-
-//                      ---- Private functions ----
 
 void CloudDashboardState::build_rows()
 {
@@ -154,28 +155,48 @@ void CloudDashboardState::build_rows()
             const std::string localKey = local_latest(titleInfo);
             const std::string cloudKey = cloud_latest(remote, titleInfo);
 
-            const char *tag = strings::tr("[none]", "[sin copias]");
-            if (!localKey.empty() && !cloudKey.empty())
+            // Rediseno: una fila por juego, agrupada por lo que hay que hacer.
+            ui::lista::Fila f{};
+            int orden{};
+            if (!localKey.empty() && !cloudKey.empty() && localKey == cloudKey)
             {
-                tag = localKey > cloudKey ? strings::tr("[UP]", "[SUBIR]") : (cloudKey > localKey ? strings::tr("[DOWN]", "[BAJAR]") : "[OK]");
+                f.seccion     = strings::tr("UP TO DATE", "AL DÍA");
+                f.valor       = strings::tr("Up to date", "Al día");
+                f.valorActivo = true;
+                orden         = 2;
             }
-            else if (!localKey.empty()) { tag = strings::tr("[UP]", "[SUBIR]"); }
-            else if (!cloudKey.empty()) { tag = strings::tr("[DOWN]", "[BAJAR]"); }
-
-            std::string name{titleInfo->get_title()};
-            if (name.size() > 26) { name = name.substr(0, 25) + "~"; }
-
-            std::string row = name;
-            row.append(32 - std::min<size_t>(name.size(), 30), ' ');
-            row += "local:" + pretty_date(localKey) + strings::tr("  cloud:", "  nube:") + pretty_date(cloudKey) + "  " + tag;
-
-            m_menu->add_option(row);
+            else if (!localKey.empty() && (cloudKey.empty() || localKey > cloudKey))
+            {
+                f.seccion = strings::tr("TO UPLOAD", "PARA SUBIR");
+                f.valor   = strings::tr("Upload", "Subir");
+                orden     = 0;
+            }
+            else if (!cloudKey.empty())
+            {
+                f.seccion = strings::tr("TO DOWNLOAD", "PARA BAJAR");
+                f.valor   = strings::tr("Download", "Bajar");
+                orden     = 1;
+            }
+            else
+            {
+                f.seccion = strings::tr("NO BACKUPS", "SIN RESPALDOS");
+                f.valor   = strings::tr("None", "Ninguno");
+                orden     = 3;
+            }
+            f.titulo      = titleInfo->get_title();
+            f.descripcion = strings::tr("Newest on the console: ", "Lo más nuevo en la consola: ") + pretty_date(localKey) + "\n" +
+                            strings::tr("Newest in the cloud: ", "Lo más nuevo en la nube: ") + pretty_date(cloudKey);
+            // Se inserta en su grupo, manteniendo el orden subir, bajar, al dia, sin respaldos.
+            auto donde = std::find_if(m_filas.begin(), m_filas.end(), [&](const ui::lista::Fila &x) {
+                const int o = x.seccion == strings::tr("TO UPLOAD", "PARA SUBIR") ? 0 : x.seccion == strings::tr("TO DOWNLOAD", "PARA BAJAR") ? 1 : x.seccion == strings::tr("UP TO DATE", "AL DÍA") ? 2 : 3;
+                return o > orden;
+            });
+            m_filas.insert(donde, std::move(f));
             ++favorites;
         }
     }
 
-    if (favorites == 0)
-    {
-        m_menu->add_option(strings::tr("No favorite games. Mark games with the heart (Y) to see them here.", "No tienes juegos favoritos. Marca juegos con el corazon (Y) para verlos aqui."));
-    }
+    // El menu solo maneja la seleccion: una opcion por fila, en el mismo orden.
+    for (const ui::lista::Fila &f : m_filas) { m_menu->add_option(f.titulo); }
+    (void)favorites;
 }

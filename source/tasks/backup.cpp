@@ -1,5 +1,10 @@
 #include "tasks/backup.hpp"
 
+#include "curl/curl.hpp"
+
+#include <archive.h>
+#include <archive_entry.h>
+
 #include "appstates/MainMenuState.hpp"
 #include "config/config.hpp"
 #include "data/data.hpp"
@@ -416,6 +421,18 @@ void tasks::backup::restore_backup_local(sys::threadpool::JobData taskData)
         read_and_process_meta(unzip, castData, task);
         auto scopedMount = create_scoped_mount(saveInfo);
         fs::copy_zip_to_directory(unzip, fs::DEFAULT_SAVE_ROOT, journalSize, task);
+
+        // Releer lo escrito y compararlo con el zip: un save a medias se descubre aqui, no al abrir el juego.
+        task->set_status(strings::tr("Verifying the restored save...", "Verificando la partida restaurada..."));
+        const int distintos = fs::verify_zip_against_directory(unzip, fs::DEFAULT_SAVE_ROOT);
+        if (distintos > 0)
+        {
+            std::string aviso = stringutil::get_formatted_string(
+                strings::tr("%d file(s) don't match the backup: the restore is probably incomplete. Your previous save was backed up first.",
+                            "%d archivo(s) no coinciden con el respaldo: es probable que la restauracion haya quedado incompleta. Tu partida anterior quedo respaldada antes."),
+                distintos);
+            ui::PopMessageManager::push_message(POP_TICKS * 2, aviso);
+        }
     }
     else if (isDir)
     {
@@ -439,6 +456,169 @@ void tasks::backup::restore_backup_local(sys::threadpool::JobData taskData)
     }
 
     task->complete();
+}
+
+// Pasa una partida bajada (zip, 7z o rar, en memoria) a un zip normal de JKSV: solo lo que esta dentro de
+// `raiz`, sin esa carpeta. Asi la restauracion es la de cualquier respaldo, meta incluido si lo trae.
+// Devuelve cuantos archivos quedaron (0 = no se pudo leer o no habia nada en esa carpeta).
+static int partida_a_zip(const std::string &datos, const std::string &raiz, const fslib::Path &zipPath, int64_t &bytes, bool &conMeta)
+{
+    // Solo los formatos de las partidas (zip, 7z, rar). format_all tambien activa xar, mtree, cab, warc y
+    // otros que no hacen falta y que pueden pedir servicios que en el Album no estan.
+    struct archive *lector = archive_read_new();
+    archive_read_support_format_zip(lector);
+    archive_read_support_format_7zip(lector);
+    archive_read_support_format_rar(lector);
+    archive_read_support_format_rar5(lector);
+    if (archive_read_open_memory(lector, datos.data(), datos.size()) != ARCHIVE_OK)
+    {
+        logger::log("partida: libarchive no lo abre: %s", archive_error_string(lector) ? archive_error_string(lector) : "?");
+        archive_read_free(lector);
+        return 0;
+    }
+
+    fs::MiniZip zip{zipPath};
+    if (!zip.is_open())
+    {
+        archive_read_free(lector);
+        return 0;
+    }
+
+    int archivos = 0;
+    bool fallo   = false;
+    bytes        = 0;
+    conMeta      = false;
+    std::vector<char> bufer(0x10000);
+    struct archive_entry *entrada{};
+    while (!fallo && archive_read_next_header(lector, &entrada) == ARCHIVE_OK)
+    {
+        if (archive_entry_filetype(entrada) != AE_IFREG) { continue; }
+
+        const char *nombre = archive_entry_pathname(entrada);
+        if (!nombre) { continue; }
+        std::string ruta{nombre};
+        std::replace(ruta.begin(), ruta.end(), '\\', '/');
+        while (ruta.rfind("./", 0) == 0) { ruta.erase(0, 2); }
+        if (!raiz.empty())
+        {
+            if (ruta.rfind(raiz, 0) != 0) { continue; }
+            ruta.erase(0, raiz.size());
+        }
+        // Nada que salga de la carpeta del save.
+        if (ruta.empty() || ruta.front() == '/' || ruta.find("..") != ruta.npos) { continue; }
+
+        if (ruta == fs::NAME_SAVE_META) { conMeta = true; }
+        else { bytes += archive_entry_size(entrada); }
+        if (!zip.open_new_file(ruta)) { fallo = true; break; }
+        la_ssize_t leidos{};
+        while ((leidos = archive_read_data(lector, bufer.data(), bufer.size())) > 0)
+        {
+            if (!zip.write(bufer.data(), static_cast<size_t>(leidos))) { fallo = true; break; }
+        }
+        if (leidos < 0) { fallo = true; }
+        zip.close_current_file();
+        if (!fallo) { ++archivos; }
+    }
+
+    archive_read_free(lector);
+    zip.close();
+    return fallo ? 0 : archivos;
+}
+
+void tasks::backup::restore_partida(sys::threadpool::JobData taskData)
+{
+    auto castData = std::static_pointer_cast<BackupMenuState::DataStruct>(taskData);
+
+    sys::ProgressTask *task        = static_cast<sys::ProgressTask *>(castData->task);
+    data::User *user               = castData->user;
+    data::TitleInfo *titleInfo     = castData->titleInfo;
+    const FsSaveDataInfo *saveInfo = castData->saveInfo;
+
+    if (error::is_null(task)) { return; }
+    else if (error::is_null({user, titleInfo, saveInfo, castData->basePath}) || castData->url.empty()) { TASK_FINISH_RETURN(task); }
+
+    // 1) Bajar el archivo a memoria: una partida pesa pocos MB. Asi un corte no deja un zip a medias en la SD.
+    task->set_status(strings::tr("Downloading full save...", "Descargando la partida completa..."));
+    logger::log("partida: bajando %s", castData->url.c_str());
+    std::string contenido{};
+    {
+        curl::Handle handle = curl::new_handle();
+        curl::prepare_get(handle);
+        curl::set_option(handle, CURLOPT_URL, castData->url.c_str());
+        curl::set_option(handle, CURLOPT_WRITEFUNCTION, curl::write_response_string);
+        curl::set_option(handle, CURLOPT_WRITEDATA, &contenido);
+        curl::set_option(handle, CURLOPT_FOLLOWLOCATION, 1L);
+        const bool bajo = curl::perform(handle) && curl::get_response_code(handle) == 200 && !contenido.empty();
+        logger::log("partida: http %li, %zu bytes", curl::get_response_code(handle), contenido.size());
+        if (!bajo)
+        {
+            ui::PopMessageManager::push_message(POP_TICKS,
+                                                strings::tr("Couldn't download the save. Probably no connection; try again.",
+                                                            "No se pudo bajar la partida. Es probable que no haya conexion; intenta de nuevo."));
+            TASK_FINISH_RETURN(task);
+        }
+    }
+
+    // 2) Pasarla a un zip de JKSV junto a los respaldos del juego: queda en la lista y se puede volver a
+    //    restaurar. Un archivo que no se puede leer (una pagina de error en vez del archivo) o sin nada en su
+    //    carpeta no debe borrar la partida actual.
+    const fslib::Path &basePath = *castData->basePath;
+    if (!fslib::directory_exists(basePath)) { error::fslib(fslib::create_directories_recursively(basePath)); }
+    const std::string fecha   = stringutil::get_date_string();
+    const fslib::Path zipPath = basePath / stringutil::get_formatted_string("PARTIDA OQB - %s.zip", fecha.c_str());
+    int64_t bytes{};
+    bool conMeta{};
+    logger::log("partida: abriendo el archivo (raiz \"%s\")", castData->raiz.c_str());
+    const int archivos        = partida_a_zip(contenido, castData->raiz, zipPath, bytes, conMeta);
+    logger::log("partida: %d archivos, %lld bytes, meta %d", archivos, static_cast<long long>(bytes), conMeta ? 1 : 0);
+    contenido.clear();
+    contenido.shrink_to_fit();
+    if (archivos == 0)
+    {
+        error::fslib(fslib::delete_file(zipPath));
+        ui::PopMessageManager::push_message(POP_TICKS,
+                                            strings::tr("The downloaded file is probably not a valid save.",
+                                                        "Es probable que lo descargado no sea una partida valida."));
+        TASK_FINISH_RETURN(task);
+    }
+
+    // 2b) Sin meta, nada agranda el save: si la partida no cabe en el de esta consola, la copia falla a mitad
+    //     (Mario Kart 8, Zelda). Se agranda solo lo necesario, como Checkpoint 5.3: el contenido mas un margen
+    //     para la estructura del save, redondeado a 1 MB y sin pasar del maximo del juego.
+    if (!conMeta)
+    {
+        FsSaveDataExtraData extra{};
+        if (fs::read_save_extra_data(saveInfo, extra))
+        {
+            constexpr int64_t MB    = 0x100000;
+            const uint8_t tipo      = saveInfo->save_data_type;
+            const int64_t maximo    = titleInfo->get_save_data_size_max(tipo);
+            int64_t necesario       = bytes + bytes / 8 + MB;
+            necesario               = (necesario + MB - 1) / MB * MB;
+            if (maximo > 0 && necesario > maximo) { necesario = maximo; }
+            if (extra.data_size < necesario && !fs::extend_save_data(saveInfo, necesario, extra.journal_size))
+            {
+                ui::PopMessageManager::push_message(POP_TICKS,
+                                                    strings::tr("Couldn't enlarge the save: the restore will probably fail for lack of space.",
+                                                                "No se pudo agrandar el save: es probable que la restauracion falle por falta de espacio."));
+            }
+        }
+    }
+
+    logger::log("partida: respaldando la actual");
+    // 3) Respaldo de la partida actual siempre, aunque el respaldo automatico al restaurar este apagado: es lo
+    //    unico que permite volver atras. restore_backup_local lo hace solo si esa opcion esta encendida.
+    if (!config::get_by_key(config::keys::AUTO_BACKUP_ON_RESTORE))
+    {
+        castData->path = zipPath;
+        auto_backup(task, castData);
+    }
+
+    logger::log("partida: restaurando");
+    // 4) Restaurar como cualquier respaldo local: borra el save, aplica el meta si lo trae y extrae.
+    castData->path     = zipPath;
+    castData->killTask = true;
+    tasks::backup::restore_backup_local(castData);
 }
 
 void tasks::backup::restore_backup_remote(sys::threadpool::JobData taskData)

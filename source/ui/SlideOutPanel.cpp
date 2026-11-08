@@ -50,6 +50,8 @@ void ui::SlideOutPanel::render(sdl::SharedTexture &target, bool hasFocus)
 {
     // Loop and render all sub-elements to the target.
     for (auto &currentElement : m_elements) { currentElement->render(m_renderTarget, hasFocus); }
+    // Rediseno: una linea en el borde que da a la pantalla.
+    sdl::render_line(m_renderTarget, m_side == Side::Right ? 0 : m_width - 1, 0, m_side == Side::Right ? 0 : m_width - 1, 720, colors::DIV_COLOR);
 
     // Render the main target to the target passed (most likely the screen);
     const int x = m_transition.get_x();

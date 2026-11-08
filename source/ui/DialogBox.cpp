@@ -24,9 +24,13 @@ ui::DialogBox::DialogBox(int x, int y, int width, int height, ui::DialogBox::Typ
 
 void ui::DialogBox::render(sdl::SharedTexture &target, bool hasFocus)
 {
-    const bool darkDialog       = m_type == DialogBox::Type::Dark;
-    sdl::SharedTexture &corners = darkDialog ? sm_darkCorners : sm_lightCorners;
-    const sdl::Color rectColor  = darkDialog ? colors::DIALOG_DARK : colors::DIALOG_LIGHT;
+    const bool darkDialog = m_type == DialogBox::Type::Dark;
+    const sdl::Color rectColor = darkDialog ? colors::DIALOG_DARK : colors::DIALOG_LIGHT;
+    // Rediseno: esquinas de un circulo blanco suavizado, tenidas del color del cuadro (las grises fijas no
+    // combinaban con el tema y dejaban esquinas claras).
+    static sdl::SharedTexture redondas = sdl::TextureManager::load("dialogCornersRound", "romfs:/Textures/DialogCornersRound.png");
+    sdl::SharedTexture &corners        = redondas ? redondas : (darkDialog ? sm_darkCorners : sm_lightCorners);
+    if (redondas) { redondas->set_color_mod(rectColor); }
 
     // Top
     corners->render_part(target, m_x, m_y, 0, 0, CORNER_WIDTH, CORNER_HEIGHT);

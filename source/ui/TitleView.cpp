@@ -6,15 +6,22 @@
 #include "graphics/colors.hpp"
 #include "input.hpp"
 #include "logging/logger.hpp"
+#include "partidas.hpp"
 #include "remote/remote.hpp"
 
 #include <cmath>
+#include <string>
+#include <unordered_set>
 
 namespace
 {
-    constexpr double UPPER_THRESHOLD = 32.0f;
-    constexpr double LOWER_THRESHOLD = 388.0f;
-    constexpr int ICON_ROW_SIZE      = 7;
+    // Rediseno: 6 por fila, con el nombre debajo. Area: 1140 x 552.
+    constexpr double UPPER_THRESHOLD = 22.0f;
+    constexpr double LOWER_THRESHOLD = 236.0f; // dos filas a la vista, como el mockup
+    constexpr int ICON_ROW_SIZE      = 6;
+    constexpr int TILE_SPACE_HOR     = 176;
+    constexpr int TILE_SPACE_VERT    = 214;
+    constexpr int GRID_X             = 55;
 }
 
 //                      ---- Construction ----
@@ -37,6 +44,12 @@ void ui::TitleView::update(bool hasFocus)
         TitleView::refresh();
         m_cloudMarked = true;
     }
+    // El catalogo de partidas llega en segundo plano: se vuelve a marcar cuando carga.
+    if (m_partidasVistas != partidas::generacion())
+    {
+        m_partidasVistas = partidas::generacion();
+        TitleView::refresh();
+    }
 
     if (m_titleTiles.empty()) { return; }
 
@@ -50,44 +63,64 @@ void ui::TitleView::update(bool hasFocus)
 
 void ui::TitleView::render(sdl::SharedTexture &target, bool hasFocus)
 {
-    static constexpr int TILE_SPACE_VERT = 144;
-    static constexpr int TILE_SPACE_HOR  = 144;
-
     if (m_titleTiles.empty()) { return; }
+
+    static sdl::SharedTexture ring = sdl::TextureManager::load("tileRing", "romfs:/Textures/TileRing.png");
 
     const int tileCount = m_titleTiles.size();
     const int y         = m_transition.get_y();
     for (int i = 0, tempY = y; i < tileCount; i += ICON_ROW_SIZE, tempY += TILE_SPACE_VERT)
     {
+        if (tempY > 440 || tempY < -8)
+        {
+            // Fuera de la vista: solo se anota la posicion del elegido.
+            for (int j = i; j < i + ICON_ROW_SIZE && j < tileCount; j++)
+            {
+                if (j == m_selected)
+                {
+                    m_selectedX = GRID_X + (j - i) * TILE_SPACE_HOR;
+                    m_selectedY = tempY;
+                }
+            }
+            continue;
+        }
         const int endRow = i + ICON_ROW_SIZE;
-        for (int j = i, tempX = 32; j < endRow && j < tileCount; j++, tempX += TILE_SPACE_HOR)
+        for (int j = i, tempX = GRID_X; j < endRow && j < tileCount; j++, tempX += TILE_SPACE_HOR)
         {
             if (j == m_selected)
             {
                 m_selectedX = tempX;
                 m_selectedY = tempY;
-                continue;
             }
-
-            ui::TitleTile &tile = m_titleTiles[j];
-            tile.render(target, tempX, tempY);
+            m_titleTiles[j].render(target, tempX, tempY);
         }
     }
 
-    if (hasFocus)
+    // Aro de seleccion del color del tema, en lugar del recuadro que parpadeaba.
+    if (hasFocus && ring)
     {
-        m_bounding->set_x(m_selectedX - 30);
-        m_bounding->set_y(m_selectedY - 30);
-
-        sdl::render_rect_fill(target, m_selectedX - 28, m_selectedY - 28, 184, 184, colors::CLEAR_COLOR);
-        m_bounding->render(target, hasFocus);
+        ring->set_color_mod(colors::BLUE_GREEN);
+        ring->render(target, m_selectedX - 6, m_selectedY - 6);
     }
-
-    ui::TitleTile &selectedTile = m_titleTiles[m_selected];
-    selectedTile.render(target, m_selectedX, m_selectedY);
 }
 
 int ui::TitleView::get_selected() const noexcept { return m_selected; }
+
+int ui::TitleView::get_selected_entry() const noexcept
+{
+    if (m_selected < 0 || m_selected >= static_cast<int>(m_titleTiles.size())) { return -1; }
+    return m_titleTiles[m_selected].get_index();
+}
+
+void ui::TitleView::set_filtro(int filtro)
+{
+    if (filtro == m_filtro) { return; }
+    m_filtro   = filtro;
+    m_selected = 0;
+    m_transition.set_y(UPPER_THRESHOLD);
+    m_transition.set_target_y(UPPER_THRESHOLD);
+    TitleView::refresh();
+}
 
 void ui::TitleView::set_selected(int selected) noexcept
 {
@@ -103,6 +136,18 @@ void ui::TitleView::refresh()
     const int entryCount    = m_user->get_total_data_entries();
     remote::Storage *remote = remote::get_remote_storage();
 
+    // Las carpetas de respaldos que existen, leidas una vez: antes se preguntaba por la carpeta de cada juego,
+    // y con muchos juegos eran cientos de consultas a la SD en cada refresco.
+    std::unordered_set<std::string> carpetas{};
+    {
+        fslib::Directory trabajo{config::get_working_directory(), false};
+        for (int c = 0; trabajo.is_open() && c < static_cast<int>(trabajo.get_count()); c++)
+        {
+            carpetas.insert(trabajo[c].get_filename());
+        }
+    }
+
+    m_cuentas = Cuentas{};
     for (int i = 0; i < entryCount; i++)
     {
         const uint64_t applicationID = m_user->get_application_id_at(i);
@@ -124,16 +169,26 @@ void ui::TitleView::refresh()
         // Mark the tile if this game has a non-empty local backup folder on the SD card. (The folder can exist
         // but be empty just from opening the game, so an entry count > 0 is what actually counts as a backup.)
         bool hasLocalBackup = false;
+        if (carpetas.count(titleInfo->get_path_safe_title()))
         {
             const fslib::Path localDir{config::get_working_directory() / titleInfo->get_path_safe_title()};
-            if (fslib::directory_exists(localDir))
             {
                 fslib::Directory localListing{localDir, false};
                 hasLocalBackup = localListing.is_open() && localListing.get_count() > 0;
             }
         }
 
-        m_titleTiles.emplace_back(isFavorite, i, icon, hasCloudBackup, hasLocalBackup);
+        const bool hasPartida = partidas::hay_para(applicationID);
+
+        // Cuentas sobre todos; el filtro decide solo que casillas se muestran.
+        ++m_cuentas.total;
+        if (isFavorite) { ++m_cuentas.favoritos; }
+        if (hasLocalBackup) { ++m_cuentas.conRespaldo; }
+        if (hasCloudBackup) { ++m_cuentas.enNube; }
+        if (hasPartida) { ++m_cuentas.conPartida; }
+        if ((m_filtro == 1 && !isFavorite) || (m_filtro == 2 && !hasPartida)) { continue; }
+
+        m_titleTiles.emplace_back(isFavorite, i, icon, hasCloudBackup, hasLocalBackup, hasPartida, std::string{titleInfo->get_title()});
     }
 
     const int tileCount = m_titleTiles.size() - 1;

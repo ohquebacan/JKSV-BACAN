@@ -68,6 +68,7 @@ void config::ConfigContext::initialize()
     m_configMap[config::keys::ENABLE_TRASH_BIN]        = 0;
     m_configMap[config::keys::BACKUP_RETENTION]        = 0; // 0 = unlimited (off); set in-app to keep newest N.
     m_configMap[config::keys::SMART_SYNC]              = 1; // 1 = on by default (protect a genuinely-newer save).
+    m_configMap[config::keys::THEME]                   = 0; // 0 = Ambar (graphics/theme.hpp).
     m_animationScaling                                 = DEFAULT_SCALING;
 }
 

@@ -1,4 +1,7 @@
 #pragma once
+#include "ui/ListaSecciones.hpp"
+
+#include <vector>
 #include "StateManager.hpp"
 #include "appstates/BaseState.hpp"
 #include "sdl.hpp"
@@ -30,6 +33,10 @@ class CloudDashboardState final : public BaseState
     private:
         /// @brief Scrollable list of per-favorite rows.
         std::shared_ptr<ui::Menu> m_menu{};
+
+        /// @brief Rediseno: filas por estado (subir, bajar, al dia) y desplazamiento.
+        std::vector<ui::lista::Fila> m_filas{};
+        double m_desplazamiento{};
 
         /// @brief Render target.
         sdl::SharedTexture m_renderTarget{};

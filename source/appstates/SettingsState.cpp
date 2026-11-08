@@ -9,6 +9,8 @@
 #include "fs/fs.hpp"
 #include "fslib.hpp"
 #include "graphics/colors.hpp"
+#include "graphics/theme.hpp"
+#include "ui/ListaSecciones.hpp"
 #include "input.hpp"
 #include "keyboard/keyboard.hpp"
 #include "logging/logger.hpp"
@@ -16,6 +18,8 @@
 #include "stringutil.hpp"
 
 #include <array>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -62,9 +66,60 @@ namespace
         CycleSortType = 17,
         ToggleJKSM    = 18,
         ToggleTrash   = 24,
-        CycleScaling  = 25
+        CycleScaling  = 25,
+        CycleTheme    = 26 // agregado por OQB: no esta en los textos traducidos, se arma con strings::tr
     };
 
+    // Rediseno: el orden en pantalla, por secciones. idx = indice original de la opcion.
+    struct Opcion
+    {
+        int idx;
+        int seccion;
+        const char *en;
+        const char *es;
+    };
+    constexpr std::array<Opcion, 27> ORDEN = {{
+        {3, 0, "Back up before restoring", "Respaldar antes de restaurar"},
+        {4, 0, "Name backups automatically", "Nombre automático al respaldar"},
+        {15, 0, "Save backups as .zip", "Guardar respaldos en .zip"},
+        {16, 0, ".zip compression", "Compresión del .zip"},
+        {24, 0, "Trash bin for deleted backups", "Papelera para lo borrado"},
+        {0, 0, "Backup folder", "Carpeta de respaldos"},
+        {9, 1, "Hold A to delete", "Mantener A para borrar"},
+        {10, 1, "Hold A to restore", "Mantener A para restaurar"},
+        {11, 1, "Hold A to overwrite", "Mantener A para sobrescribir"},
+        {5, 2, "Upload to the cloud when backing up", "Subir a la nube al respaldar"},
+        {6, 2, "Keep a copy on the console", "Conservar copia en la consola"},
+        {17, 3, "Sort games by", "Ordenar juegos por"},
+        {12, 3, "Only games with an accessible save", "Solo juegos con partida accesible"},
+        {1, 3, "Hidden games", "Juegos ocultos"},
+        {7, 3, "Folders named by game ID", "Carpetas con el ID del juego"},
+        {8, 3, "Folder names without accents", "Carpetas sin acentos"},
+        {18, 3, "Plain text list", "Lista de solo texto"},
+        {2, 4, "Device saves with each user", "Partidas del dispositivo en cada usuario"},
+        {20, 4, "Show Device", "Mostrar Dispositivo"},
+        {21, 4, "Show BCAT", "Mostrar BCAT"},
+        {22, 4, "Show Cache", "Mostrar Caché"},
+        {23, 4, "Show System", "Mostrar Sistema"},
+        {13, 4, "System saves of each account", "Partidas de sistema de cada cuenta"},
+        {14, 4, "Allow writing system saves", "Permitir escribir partidas del sistema"},
+        {26, 5, "Theme", "Tema"},
+        {25, 5, "Animation speed", "Velocidad de animaciones"},
+        {19, 5, "App in English", "App en inglés"},
+    }};
+
+    const char *nombre_seccion(int seccion)
+    {
+        switch (seccion)
+        {
+            case 0:  return strings::tr("BACKUPS", "RESPALDOS");
+            case 1:  return strings::tr("CONFIRMATIONS", "CONFIRMACIONES");
+            case 2:  return strings::tr("CLOUD", "NUBE");
+            case 3:  return strings::tr("GAME LIST", "LISTA DE JUEGOS");
+            case 4:  return strings::tr("SPECIAL USERS", "USUARIOS ESPECIALES");
+            default: return strings::tr("APPEARANCE", "APARIENCIA");
+        }
+    }
 } // namespace
 
 //                      ---- Construction ----
@@ -104,9 +159,40 @@ void SettingsState::render()
 {
     const bool hasFocus = BaseState::has_focus();
 
-    m_renderTarget->clear(colors::TRANSPARENT);
-    m_settingsMenu->render(m_renderTarget, hasFocus);
-    m_renderTarget->render(sdl::Texture::Null, 201, 91);
+    std::vector<ui::lista::Fila> filas{};
+    filas.reserve(ORDEN.size());
+    for (const Opcion &o : ORDEN)
+    {
+        ui::lista::Fila f{};
+        f.seccion = nombre_seccion(o.seccion);
+        f.titulo  = strings::tr(o.en, o.es);
+        if (o.idx == CaseIndexes::ChangeWorkDir) { f.valor = config::get_working_directory().string(); }
+        else if (o.idx == CaseIndexes::EditBlacklist) { f.valor = strings::tr("Edit", "Editar"); }
+        else if (o.idx == CaseIndexes::CycleZip) { f.valor = std::to_string(config::get_by_key(config::keys::ZIP_COMPRESSION_LEVEL)); }
+        else if (o.idx == CaseIndexes::CycleSortType)
+        {
+            const char *tipo = SettingsState::get_sort_type_text(config::get_by_key(config::keys::TITLE_SORT_TYPE));
+            f.valor          = tipo ? tipo : "";
+        }
+        else if (o.idx == CaseIndexes::CycleScaling) { f.valor = stringutil::get_formatted_string("%.2f", config::get_animation_scaling()); }
+        else if (o.idx == CaseIndexes::CycleTheme)
+        {
+            f.valor       = theme::name(config::get_by_key(config::keys::THEME));
+            f.valorActivo = true;
+        }
+        else
+        {
+            const bool on = config::get_by_key(CONFIG_KEY_ARRAY[o.idx]);
+            f.valor       = on ? strings::tr("On", "Encendido") : strings::tr("Off", "Apagado");
+            f.valorActivo = on;
+        }
+        const char *desc = o.idx == CaseIndexes::CycleTheme
+                               ? strings::tr("Changes the app's colors. Amber is the default.", "Cambia los colores de la app. Ámbar es el de por defecto.")
+                               : strings::get_by_name(strings::names::SETTINGS_DESCRIPTIONS, o.idx);
+        f.descripcion = desc ? desc : "";
+        filas.push_back(std::move(f));
+    }
+    ui::lista::dibujar(filas, m_settingsMenu->get_selected(), m_desplazamiento, hasFocus);
     m_controlGuide->render(sdl::Texture::Null, hasFocus);
 }
 
@@ -119,6 +205,8 @@ void SettingsState::load_settings_menu()
     {
         m_settingsMenu->add_option(option);
     }
+    // Tema: va al final, con su texto armado aqui (update_menu_options lo completa).
+    m_settingsMenu->add_option(strings::tr("Theme", "Tema"));
 }
 
 void SettingsState::load_extra_strings()
@@ -156,6 +244,12 @@ void SettingsState::update_menu_options()
         const char *typeText             = SettingsState::get_sort_type_text(sortType);
         const std::string sortTypeOption = stringutil::get_formatted_string(titleSortFormat, typeText);
         m_settingsMenu->edit_option(CaseIndexes::CycleSortType, sortTypeOption);
+    }
+
+    {
+        const std::string themeOption = stringutil::get_formatted_string(strings::tr("Theme: %s", "Tema: %s"),
+                                                                         theme::name(config::get_by_key(config::keys::THEME)));
+        m_settingsMenu->edit_option(CaseIndexes::CycleTheme, themeOption);
     }
 
     {
@@ -226,7 +320,9 @@ void SettingsState::create_push_blacklist_edit()
 
 void SettingsState::toggle_options()
 {
-    const int selected = m_settingsMenu->get_selected();
+    const int fila = m_settingsMenu->get_selected();
+    if (fila < 0 || fila >= static_cast<int>(ORDEN.size())) { return; }
+    const int selected = ORDEN[fila].idx;
 
     switch (selected)
     {
@@ -237,6 +333,7 @@ void SettingsState::toggle_options()
         case CaseIndexes::ToggleJKSM:    SettingsState::toggle_jksm_mode(); break;
         case CaseIndexes::ToggleTrash:   SettingsState::toggle_trash_folder(); break;
         case CaseIndexes::CycleScaling:  SettingsState::cycle_anim_scaling(); break;
+        case CaseIndexes::CycleTheme:    theme::cycle(); break;
         default:                         config::toggle_by_key(CONFIG_KEY_ARRAY[selected]); break;
     }
 
@@ -246,13 +343,19 @@ void SettingsState::toggle_options()
 void SettingsState::reset_settings()
 {
     config::reset_to_default();
+    theme::apply_from_config();
     SettingsState::update_menu_options();
 }
 
 void SettingsState::create_push_description_message()
 {
-    const int selected      = m_settingsMenu->get_selected();
-    const char *description = strings::get_by_name(strings::names::SETTINGS_DESCRIPTIONS, selected);
+    const int fila = m_settingsMenu->get_selected();
+    if (fila < 0 || fila >= static_cast<int>(ORDEN.size())) { return; }
+    const int selected      = ORDEN[fila].idx;
+    const char *description = selected == CaseIndexes::CycleTheme
+                                  ? strings::tr("Changes the app's colors. Amber is the default.", "Cambia los colores de la app. Ámbar es el de por defecto.")
+                                  : strings::get_by_name(strings::names::SETTINGS_DESCRIPTIONS, selected);
+    if (!description) { return; }
 
     MessageState::create_push_fade(description);
 }

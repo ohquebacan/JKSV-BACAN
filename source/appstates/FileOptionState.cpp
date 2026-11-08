@@ -1,5 +1,7 @@
 #include "appstates/FileOptionState.hpp"
 
+#include <vector>
+
 #include "appstates/ConfirmState.hpp"
 #include "appstates/MessageState.hpp"
 #include "appstates/ProgressState.hpp"
@@ -24,6 +26,7 @@ namespace
     enum
     {
         COPY,
+        MOVE,
         DELETE,
         RENAME,
         CREATE_DIR,
@@ -100,7 +103,7 @@ void FileOptionState::initialize_static_members()
     // Menu coords.
     static constexpr int MENU_Y         = 253;
     static constexpr int MENU_WIDTH     = 234;
-    static constexpr int MENU_FONT_SIZE = 20;
+    static constexpr int MENU_FONT_SIZE = 18; // rediseno: 7 opciones (con Mover) en el mismo cuadro
 
     // Dialog
     static constexpr int DIALOG_X            = 2000;
@@ -127,11 +130,14 @@ void FileOptionState::initialize_static_members()
         ui::DialogBox::create(DIALOG_X, DIALOG_Y, DIALOG_WIDTH_HEIGHT, DIALOG_WIDTH_HEIGHT); // Create this off screen at first.
 
     // This never changes, so...
-    const char *menuOption = nullptr;
-    for (int i = 0; (menuOption = strings::get_by_name(strings::names::FILEOPTION_MENU, i)); i++)
-    {
-        sm_copyMenu->add_option(menuOption);
-    }
+    // Rediseno: textos propios, con Mover.
+    sm_copyMenu->add_option(strings::tr("Copy", "Copiar"));
+    sm_copyMenu->add_option(strings::tr("Move", "Mover"));
+    sm_copyMenu->add_option(strings::tr("Delete", "Borrar"));
+    sm_copyMenu->add_option(strings::tr("Rename", "Renombrar"));
+    sm_copyMenu->add_option(strings::tr("New folder", "Nueva carpeta"));
+    sm_copyMenu->add_option(strings::tr("Properties", "Propiedades"));
+    sm_copyMenu->add_option(strings::tr("Close", "Cerrar"));
 }
 
 void FileOptionState::initialize_data_struct() { m_dataStruct->spawningState = this; }
@@ -177,7 +183,8 @@ void FileOptionState::update_handle_input() noexcept
     {
         switch (selected)
         {
-            case COPY:       FileOptionState::copy_target(); break;
+            case COPY:       FileOptionState::copy_target(false); break;
+            case MOVE:       FileOptionState::copy_target(true); break;
             case DELETE:     FileOptionState::delete_target(); break;
             case RENAME:     FileOptionState::rename_target(); break;
             case CREATE_DIR: FileOptionState::create_directory(); break;
@@ -209,7 +216,7 @@ void FileOptionState::update_filemode_dest()
     m_updateDest = false;
 }
 
-void FileOptionState::copy_target()
+void FileOptionState::copy_target(bool mover)
 {
     const int popTicks = ui::PopMessageManager::DEFAULT_TICKS;
 
@@ -232,8 +239,9 @@ void FileOptionState::copy_target()
     const int sourceSelected = sourceMenu.get_selected();
     const int destSelected   = destMenu.get_selected();
 
-    const int sourceIndex = sourceSelected - 2;
-    const int destIndex   = destSelected - 2;
+    const FileModeState::Target destino = m_target == FileModeState::Target::MountA ? FileModeState::Target::MountB : FileModeState::Target::MountA;
+    const int sourceIndex = m_spawningState->indice_real(m_target, sourceSelected);
+    const int destIndex   = m_spawningState->indice_real(destino, destSelected);
 
     fslib::Path fullSource{sourcePath};
     if (sourceSelected > 1) { fullSource /= sourceDir[sourceIndex]; }
@@ -255,17 +263,39 @@ void FileOptionState::copy_target()
         if (sourceSelected > 1) { fullDest /= sourceDir[sourceIndex]; }
     }
 
-    // Reminder: JK, you move these. That's why the string is blank if they're declared past this point.
-    const std::string sourceString = fullSource.string();
-    const std::string destString   = fullDest.string();
-    m_dataStruct->sourcePath       = std::move(fullSource);
-    m_dataStruct->destPath         = std::move(fullDest);
-    m_dataStruct->journalSize      = journalSize;
+    // Rediseno: varios marcados van todos a la carpeta de destino; si no hay marcas, el elegido.
+    m_dataStruct->fuentes.clear();
+    m_dataStruct->destinos.clear();
+    m_dataStruct->mover       = mover;
+    m_dataStruct->journalSize = journalSize;
+    const std::vector<int> marcadas = m_spawningState->marcadas(m_target);
+    std::string query{};
+    if (!marcadas.empty())
+    {
+        // Carpeta de destino: la del otro lado (o la carpeta elegida ahi).
+        fslib::Path carpetaDestino{destPath};
+        if (destSelected > 1 && destIndex >= 0 && destDir[destIndex].is_directory()) { carpetaDestino /= destDir[destIndex]; }
+        for (const int i : marcadas)
+        {
+            m_dataStruct->fuentes.push_back(sourcePath / sourceDir[i]);
+            m_dataStruct->destinos.push_back(carpetaDestino / sourceDir[i]);
+        }
+        query = stringutil::get_formatted_string(mover ? strings::tr("Move %d items to %s?", "¿Mover %d elementos a %s?")
+                                                       : strings::tr("Copy %d items to %s?", "¿Copiar %d elementos a %s?"),
+                                                 static_cast<int>(marcadas.size()),
+                                                 carpetaDestino.string().c_str());
+    }
+    else
+    {
+        const std::string sourceString = fullSource.string();
+        const std::string destString   = fullDest.string();
+        m_dataStruct->fuentes.push_back(std::move(fullSource));
+        m_dataStruct->destinos.push_back(std::move(fullDest));
+        query = mover ? stringutil::get_formatted_string(strings::tr("Move %s to %s?", "¿Mover %s a %s?"), sourceString.c_str(), destString.c_str())
+                      : stringutil::get_formatted_string(strings::get_by_name(strings::names::FILEOPTION_CONFS, 0), sourceString.c_str(), destString.c_str());
+    }
 
-    const char *copyFormat  = strings::get_by_name(strings::names::FILEOPTION_CONFS, 0);
-    const std::string query = stringutil::get_formatted_string(copyFormat, sourceString.c_str(), destString.c_str());
-
-    ConfirmProgress::create_push_fade(query, false, tasks::fileoptions::copy_source_to_destination, nullptr, m_dataStruct);
+    ConfirmProgress::create_push_fade(query, false, tasks::fileoptions::copiar_varios, nullptr, m_dataStruct);
 }
 
 void FileOptionState::delete_target()
@@ -282,21 +312,32 @@ void FileOptionState::delete_target()
 
     fslib::Path fullTarget{targetPath};
     const int selected = targetMenu.get_selected();
-    if (selected == 0) { return; } // I have no way to handle this right now.
+    if (selected == 0 && m_spawningState->marcadas(m_target).empty()) { return; } // I have no way to handle this right now.
     else if (selected > 1)
     {
-        const int dirIndex = selected - 2;
+        const int dirIndex = m_spawningState->indice_real(m_target, selected);
+        if (dirIndex < 0) { return; }
         fullTarget /= targetDir[dirIndex];
     }
 
-    const bool holdRequired  = config::get_by_key(config::keys::HOLD_FOR_DELETION);
-    const char *deleteFormat = strings::get_by_name(strings::names::FILEOPTION_CONFS, 1);
-    const std::string query  = stringutil::get_formatted_string(deleteFormat, fullTarget.string().c_str());
-
-    m_dataStruct->sourcePath  = std::move(fullTarget);
+    const bool holdRequired = config::get_by_key(config::keys::HOLD_FOR_DELETION);
+    m_dataStruct->fuentes.clear();
     m_dataStruct->journalSize = m_spawningState->m_journalSize;
+    std::string query{};
+    const std::vector<int> marcadas = m_spawningState->marcadas(m_target);
+    if (!marcadas.empty())
+    {
+        for (const int i : marcadas) { m_dataStruct->fuentes.push_back(targetPath / targetDir[i]); }
+        query = stringutil::get_formatted_string(strings::tr("Delete %d items? This can't be undone.", "¿Borrar %d elementos? No se puede deshacer."),
+                                                 static_cast<int>(marcadas.size()));
+    }
+    else
+    {
+        query = stringutil::get_formatted_string(strings::get_by_name(strings::names::FILEOPTION_CONFS, 1), fullTarget.string().c_str());
+        m_dataStruct->fuentes.push_back(std::move(fullTarget));
+    }
 
-    ConfirmTask::create_push_fade(query, holdRequired, tasks::fileoptions::delete_target, nullptr, m_dataStruct);
+    ConfirmTask::create_push_fade(query, holdRequired, tasks::fileoptions::borrar_varios, nullptr, m_dataStruct);
 }
 
 void FileOptionState::rename_target()
@@ -316,7 +357,8 @@ void FileOptionState::rename_target()
     if (selected < 2) { return; }
 
     char nameBuffer[FS_MAX_PATH]     = {0};
-    const int dirIndex               = selected - 2;
+    const int dirIndex               = m_spawningState->indice_real(m_target, selected);
+    if (dirIndex < 0) { return; }
     const char *filename             = targetDir[dirIndex].get_filename();
     const char *keyboardFormat       = strings::get_by_name(strings::names::KEYBOARD, 9);
     const std::string keyboardHeader = stringutil::get_formatted_string(keyboardFormat, filename);
@@ -392,7 +434,8 @@ void FileOptionState::get_show_target_properties()
     const int selected = sourceMenu.get_selected();
     if (selected > 1)
     {
-        const int dirIndex = selected - 2;
+        const int dirIndex = m_spawningState->indice_real(m_target, selected);
+        if (dirIndex < 0) { return; }
         targetPath /= sourceDir[dirIndex];
     }
 

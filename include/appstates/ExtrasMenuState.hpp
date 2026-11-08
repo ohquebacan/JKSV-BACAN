@@ -30,6 +30,9 @@ class ExtrasMenuState final : public BaseState
         /// @brief Render target for menu.
         sdl::SharedTexture m_renderTarget{};
 
+        /// @brief Rediseno: desplazamiento de la lista por secciones.
+        double m_desplazamiento{};
+
         /// @brief Control guider for bottom right corner.
         std::shared_ptr<ui::ControlGuide> m_controlGuide{};
 

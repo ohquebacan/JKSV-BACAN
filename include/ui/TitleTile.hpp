@@ -2,6 +2,9 @@
 #include "sdl.hpp"
 #include "ui/Transition.hpp"
 
+#include <string>
+#include <vector>
+
 namespace ui
 {
     /// @brief Tile for Titleview.
@@ -17,7 +20,12 @@ namespace ui
                       int index,
                       sdl::SharedTexture icon,
                       bool hasCloudBackup = false,
-                      bool hasLocalBackup = false);
+                      bool hasLocalBackup = false,
+                      bool hasPartida     = false,
+                      std::string name    = {});
+
+            /// @brief Medida del juego en la cuadricula del rediseno.
+            static constexpr int SIZE = 150;
 
             /// @brief Runs the update routine.
             /// @param isSelected Whether or not the tile is selected and needs to expand.
@@ -40,6 +48,9 @@ namespace ui
             /// @return Render height.
             int get_height() const noexcept;
 
+            /// @brief Indice del juego en la lista del usuario (con filtro, no coincide con la casilla).
+            int get_index() const noexcept { return m_index; }
+
         private:
             /// @brief Transition for the tile select/deselect.
             ui::Transition m_transition{};
@@ -53,6 +64,16 @@ namespace ui
             /// @brief Whether the title has a backup on the SD card (local working directory).
             bool m_hasLocalBackup{};
 
+            bool m_hasPartida{}; // hay partida completa en el catalogo de OQB
+
+            bool m_isSelected{};
+
+            std::string m_name{}; // nombre que se muestra debajo, recortado a dos lineas al dibujarlo
+
+            bool m_nameReady{};
+
+            std::vector<std::string> m_lineas{};
+
             int m_index{};
 
             /// @brief Title's icon texture.
@@ -60,5 +81,9 @@ namespace ui
 
             /// @brief Shared cloud-badge texture, loaded once and reused by every tile.
             static inline sdl::SharedTexture sm_cloudIcon{};
+            static inline sdl::SharedTexture sm_badgeBase{};
+            static inline sdl::SharedTexture sm_badgeCheck{};
+            static inline sdl::SharedTexture sm_partida{};
+            static inline sdl::SharedTexture sm_mask{};
     };
 } // namespace ui

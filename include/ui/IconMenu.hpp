@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include "ui/Menu.hpp"
 
 #include <memory>
@@ -44,8 +45,17 @@ namespace ui
             /// @param newOption Icon to add.
             void add_option(sdl::SharedTexture newOption);
 
+            /// @brief Con el nombre que va debajo del avatar (rediseno).
+            void add_option(sdl::SharedTexture newOption, std::string label, bool glyph = false);
+
         private:
             /// @brief Vector of shared texture pointers to textures used.
             std::vector<sdl::SharedTexture> m_options;
+
+            std::vector<std::string> m_labels;
+
+            std::vector<bool> m_glyphs; // icono de linea sobre un circulo (Ajustes, Extras)
+
+            double m_scrollUsuarios{}; // los usuarios se desplazan solos para que el elegido no quede tras los botones
     };
 } // namespace ui

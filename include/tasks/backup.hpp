@@ -18,6 +18,10 @@ namespace tasks::backup
     void restore_backup_local(sys::threadpool::JobData taskData);
     void restore_backup_remote(sys::threadpool::JobData taskData);
 
+    /// @brief Descarga una partida completa del catalogo de OQB (data->url) a la carpeta del juego, respalda
+    /// la partida actual y la restaura en su lugar.
+    void restore_partida(sys::threadpool::JobData taskData);
+
     /// @brief Deletes a backup
     void delete_backup_local(sys::threadpool::JobData taskData);
     void delete_backup_remote(sys::threadpool::JobData taskData);

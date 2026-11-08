@@ -75,3 +75,5 @@ const char *fs::MiniUnzip::get_filename() const noexcept { return m_filename; }
 uint64_t fs::MiniUnzip::get_compressed_size() const noexcept { return m_fileInfo.compressed_size; }
 
 uint64_t fs::MiniUnzip::get_uncompressed_size() const noexcept { return m_fileInfo.uncompressed_size; }
+
+uint32_t fs::MiniUnzip::get_crc() const noexcept { return static_cast<uint32_t>(m_fileInfo.crc); }

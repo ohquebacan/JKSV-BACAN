@@ -5,12 +5,14 @@
 #include "appstates/MainMenuState.hpp"
 #include "appstates/TaskState.hpp"
 #include "builddate.hpp"
+#include "tasks/update.hpp"
 #include "config/config.hpp"
 #include "curl/curl.hpp"
 #include "data/data.hpp"
 #include "error.hpp"
 #include "fslib.hpp"
 #include "graphics/colors.hpp"
+#include "graphics/theme.hpp"
 #include "graphics/screen.hpp"
 #include "input.hpp"
 #include "logging/logger.hpp"
@@ -80,6 +82,8 @@ JKSV::JKSV()
     // Config and input.
     input::initialize();
     config::initialize();
+    // El tema guardado, antes de dibujar nada.
+    theme::apply_from_config();
 
     // These are the strings used in the UI.
     ABORT_ON_FAILURE(strings::initialize()); // This is fatal now.
@@ -191,11 +195,15 @@ bool JKSV::initialize_sdl()
     // Initialize SDL, freetype and the system font.
     bool sdlInit = sdl::initialize("JKSV", graphics::SCREEN_WIDTH, graphics::SCREEN_HEIGHT);
     sdlInit      = sdlInit && sdl::text::SystemFont::initialize();
+    // Rediseno: Instrument Sans (la del mockup, peso 500) primero; lo que no tenga sale de la del sistema.
+    if (sdlInit) { sdl::text::SystemFont::add_font_file("romfs:/InstrumentSans-Medium.ttf"); }
     if (!sdlInit) { return false; }
 
     // Load the icon in the top left.
-    m_headerIcon = sdl::TextureManager::load("headerIcon", "romfs:/Textures/HeaderIcon.png");
-    if (!m_headerIcon) { return false; }
+    // Rediseno: la Trifuerza (se tine con el color del tema) y el titulo en Upheaval.
+    m_headerIcon  = sdl::TextureManager::load("headerTriforce", "romfs:/Textures/Triforce.png");
+    m_headerTitle = sdl::TextureManager::load("headerTitle", "romfs:/Textures/Title.png");
+    if (!m_headerIcon || !m_headerTitle) { return false; }
 
     // Push the color changing characters.
     JKSV::add_color_chars();
@@ -237,7 +245,7 @@ void JKSV::setup_translation_info_strings()
     const char *author            = strings::get_by_name(strings::names::TRANSLATION, 1);
     m_showTranslationInfo         = std::char_traits<char>::compare(author, "NULL", 4) != 0; // This is whether or not to show.
     m_translationInfo             = stringutil::get_formatted_string(translationFormat, author);
-    m_buildString = stringutil::get_formatted_string("JKSV BACAN v2.0 OQB! (%04d-%02d-%02d)", builddate::YEAR, builddate::MONTH, builddate::DAY);
+    m_buildString = stringutil::get_formatted_string("JKSV BACAN v%s OQB!", tasks::update::version_actual());
 }
 
 void JKSV::applet_mode_warning() noexcept
@@ -256,56 +264,31 @@ void JKSV::applet_mode_warning() noexcept
 
 void JKSV::render_base()
 {
-    // These are the same for both.
-    static constexpr int LINE_X_BEGIN = 30;
-    static constexpr int LINE_X_END   = 1250;
+    // Rediseno: columna de usuarios a la izquierda a toda la altura; encabezado y lineas a su derecha.
+    static constexpr int COLUMNA  = 140;
+    static constexpr int LINEA_A  = 96;
+    static constexpr int LINEA_B  = 648;
+    static constexpr int BUILD_X  = 8;
+    static constexpr int BUILD_Y  = 700;
+    static constexpr int TRANS_Y  = 680;
+    static constexpr int BUILD_SZ = 12;
 
-    // These are the Y's.
-    static constexpr int LINE_A_Y = 88;
-    static constexpr int LINE_B_Y = 648;
+    sdl::render_rect_fill(sdl::Texture::Null, 0, 0, COLUMNA, 720, colors::PANEL_SOLID);
+    sdl::render_line(sdl::Texture::Null, COLUMNA, 0, COLUMNA, 720, colors::DIV_COLOR);
+    sdl::render_line(sdl::Texture::Null, COLUMNA, LINEA_A, 1280, LINEA_A, colors::DIV_COLOR);
+    sdl::render_line(sdl::Texture::Null, COLUMNA, LINEA_B, 1280, LINEA_B, colors::DIV_COLOR);
 
-    // Coordinates for the header icon.
-    static constexpr int HEADER_X = 66;
-    static constexpr int HEADER_Y = 27;
+    // Trifuerza del color del tema y "JKSV BACAN" en Upheaval.
+    m_headerIcon->set_color_mod(colors::BLUE_GREEN);
+    m_headerIcon->render(sdl::Texture::Null, COLUMNA + 36, 32);
+    m_headerTitle->render(sdl::Texture::Null, COLUMNA + 86, 32);
 
-    // Coordinates for the title text.
-    static constexpr int TITLE_X    = 130;
-    static constexpr int TITLE_Y    = 32;
-    static constexpr int TITLE_SIZE = 34;
-
-    // Coordinates for the translation info and build date.
-    static constexpr int BUILD_X    = 8;
-    static constexpr int BUILD_Y    = 700;
-    static constexpr int TRANS_Y    = 680;
-    static constexpr int BUILD_SIZE = 14;
-
-    // This is just the JKSV string.
-    static constexpr std::string_view TITLE_TEXT = "JKSV BACÁN";
-
-    // Top and bottom framing lines.
-    sdl::render_line(sdl::Texture::Null, LINE_X_BEGIN, LINE_A_Y, LINE_X_END, LINE_A_Y, colors::WHITE);
-    sdl::render_line(sdl::Texture::Null, LINE_X_BEGIN, LINE_B_Y, LINE_X_END, LINE_B_Y, colors::WHITE);
-
-    // Icon
-    m_headerIcon->render(sdl::Texture::Null, HEADER_X, HEADER_Y);
-
-    // "JKSV"
-    sdl::text::render(sdl::Texture::Null, TITLE_X, TITLE_Y, TITLE_SIZE, sdl::text::NO_WRAP, colors::WHITE, TITLE_TEXT);
-
-    // Translation info in bottom left.
-    if (m_showTranslationInfo)
-    {
-        sdl::text::render(sdl::Texture::Null,
-                          BUILD_X,
-                          TRANS_Y,
-                          BUILD_SIZE,
-                          sdl::text::NO_WRAP,
-                          colors::WHITE,
-                          m_translationInfo);
-    }
-
-    // Build date
-    sdl::text::render(sdl::Texture::Null, BUILD_X, BUILD_Y, BUILD_SIZE, sdl::text::NO_WRAP, colors::WHITE, m_buildString);
+    // La version y el traductor ya no se dibujan aqui: en la columna angosta del rediseno se partian en
+    // varias lineas debajo de los botones.
+    (void)BUILD_X;
+    (void)BUILD_Y;
+    (void)TRANS_Y;
+    (void)BUILD_SZ;
 }
 
 void JKSV::exit_services()

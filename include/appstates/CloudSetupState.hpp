@@ -34,6 +34,9 @@ class CloudSetupState final : public BaseState
         /// @brief Menu for the provider options.
         std::shared_ptr<ui::Menu> m_menu{};
 
+        /// @brief Rediseno: desplazamiento de la lista por secciones.
+        double m_desplazamiento{};
+
         /// @brief Render target for the menu.
         sdl::SharedTexture m_renderTarget{};
 

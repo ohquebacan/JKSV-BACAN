@@ -37,6 +37,20 @@ namespace ui
             /// @return Index of currently selected tile.
             int get_selected() const noexcept;
 
+            /// @brief Rediseno: el juego de la casilla elegida (indice en la lista del usuario), o -1.
+            int get_selected_entry() const noexcept;
+
+            /// @brief 0 todos, 1 favoritos, 2 con partida completa.
+            void set_filtro(int filtro);
+            int get_filtro() const noexcept { return m_filtro; }
+
+            /// @brief Cuentas sobre todos los juegos del usuario (sin filtro).
+            struct Cuentas
+            {
+                int total{}, favoritos{}, conRespaldo{}, enNube{}, conPartida{};
+            };
+            const Cuentas &get_cuentas() const noexcept { return m_cuentas; }
+
             /// @brief Sets the currently selected item.
             void set_selected(int selected) noexcept;
 
@@ -73,6 +87,12 @@ namespace ui
 
             /// @brief Whether the tiles have been re-marked once the (async) remote listing became available.
             bool m_cloudMarked{};
+
+            /// @brief Ultima carga del catalogo de partidas que se marco en la cuadricula.
+            int m_partidasVistas{};
+
+            int m_filtro{};
+            Cuentas m_cuentas{};
 
             /// @brief Bounding box rendered around the selected title.
             std::shared_ptr<ui::BoundingBox> m_bounding{};

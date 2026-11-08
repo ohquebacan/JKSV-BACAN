@@ -18,5 +18,7 @@ void TitleSelectCommon::initialize_control_guide()
 {
     if (sm_controlGuide) { return; }
 
-    sm_controlGuide = ui::ControlGuide::create(strings::get_by_name(strings::names::CONTROL_GUIDES, 1));
+    // Rediseno: textos cortos.
+    sm_controlGuide = ui::ControlGuide::create(strings::tr("\uE0E0 Open    \uE0E3 Favorite    \uE0E2 Options    ZL/ZR Filter    \uE0E1 Back",
+                                                          "\uE0E0 Abrir    \uE0E3 Favorito    \uE0E2 Opciones    ZL/ZR Filtro    \uE0E1 Atrás"));
 }

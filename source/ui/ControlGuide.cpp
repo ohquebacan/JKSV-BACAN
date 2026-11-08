@@ -7,10 +7,10 @@
 namespace
 {
     /// @brief This is the X coordinate used to calculate where the guide should be.
-    constexpr int GUIDE_X_OFFSET = 1220;
+    constexpr int GUIDE_X_OFFSET = 1250; // rediseno: alineado al borde del contenido
 
     /// @brief This is the font size used for the guides.
-    constexpr int GUIDE_TEXT_SIZE = 24;
+    constexpr int GUIDE_TEXT_SIZE = 18; // rediseno: una linea compacta
 
     /// @brief This is the constant Y of the transition.
     constexpr int TRANS_Y = 662;
@@ -59,28 +59,20 @@ void ui::ControlGuide::render(sdl::SharedTexture &target, bool hasFocus)
     // This is where the text is rendered and its size.
     static constexpr int TEXT_OFFSET_X  = 24;
     static constexpr int TEXT_OFFSET_Y  = 10;
-    static constexpr int TEXT_FONT_SIZE = 24;
 
     // Grab the X and Y.
     const int guideX = m_transition.get_x();
     const int guideY = m_transition.get_y();
 
-    // Render the cap and the rectangle.
-    sm_controlCap->render(sdl::Texture::Null, guideX, guideY);
-    sdl::render_rect_fill(sdl::Texture::Null,
-                          guideX + RECT_OFFSET_X,
-                          guideY,
-                          m_guideWidth - RECT_OFFSET_X,
-                          RECT_HEIGHT,
-                          colors::GUIDE_COLOR);
-
-    // Guide text.
+    // Rediseno: sin la capsula oscura; solo el texto, atenuado, alineado a la derecha del pie.
+    (void)RECT_OFFSET_X;
+    (void)RECT_HEIGHT;
     sdl::text::render(sdl::Texture::Null,
                       guideX + TEXT_OFFSET_X,
-                      guideY + TEXT_OFFSET_Y,
-                      TEXT_FONT_SIZE,
+                      guideY + TEXT_OFFSET_Y + 4,
+                      GUIDE_TEXT_SIZE,
                       sdl::text::NO_WRAP,
-                      colors::WHITE,
+                      colors::DIALOG_LIGHT,
                       m_guide);
 }
 

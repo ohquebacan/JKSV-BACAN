@@ -43,9 +43,21 @@ void DataLoadingState::render()
     const int statusWidth = sdl::text::get_width(BaseTask::FONT_SIZE, status);
     m_statusX             = SCREEN_CENTER - (statusWidth / 2);
 
+    // Rediseno: la Trifuerza grande del color del tema, el titulo en Upheaval y el estado debajo.
+    static sdl::SharedTexture trifuerza = sdl::TextureManager::load("triforceBig", "romfs:/Textures/TriforceBig.png");
+    static sdl::SharedTexture titulo    = sdl::TextureManager::load("headerTitle", "romfs:/Textures/Title.png");
+    (void)ICON_X_COORD;
+    (void)ICON_Y_COORD;
     sdl::render_rect_fill(sdl::Texture::Null, 0, 0, graphics::SCREEN_WIDTH, graphics::SCREEN_HEIGHT, colors::CLEAR_COLOR);
-    sm_jksvIcon->render(sdl::Texture::Null, ICON_X_COORD, ICON_Y_COORD);
-    sdl::text::render(sdl::Texture::Null, m_statusX, 673, BaseTask::FONT_SIZE, sdl::text::NO_WRAP, colors::WHITE, status);
+    if (trifuerza)
+    {
+        trifuerza->set_color_mod(colors::BLUE_GREEN);
+        trifuerza->render(sdl::Texture::Null, SCREEN_CENTER - 54, 236);
+    }
+    if (titulo) { titulo->render(sdl::Texture::Null, SCREEN_CENTER - 175, 360); }
+    const int estadoW = sdl::text::get_width(20, status);
+    sdl::text::render(sdl::Texture::Null, SCREEN_CENTER - estadoW / 2, 430, 20, sdl::text::NO_WRAP, colors::DIALOG_LIGHT, status);
+    (void)m_statusX;
     BaseTask::render_loading_glyph();
 }
 

@@ -10,7 +10,12 @@
 #include "strings/strings.hpp"
 #include "stringutil.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <vector>
+#include <set>
 #include <cmath>
+#include <string>
 
 namespace
 {
@@ -19,6 +24,46 @@ namespace
 
     /// @brief This is the target Y of the pop-up. The starting Y is the height of the screen.
     constexpr int TARGET_Y = 91;
+
+    std::string tamano_corto(int64_t bytes)
+    {
+        if (bytes < 0) { return "?"; }
+        if (bytes < 1024) { return stringutil::get_formatted_string("%lld B", static_cast<long long>(bytes)); }
+        if (bytes < 1024 * 1024) { return stringutil::get_formatted_string("%.0f KB", bytes / 1024.0); }
+        if (bytes < 1024LL * 1024 * 1024) { return stringutil::get_formatted_string("%.1f MB", bytes / (1024.0 * 1024.0)); }
+        return stringutil::get_formatted_string("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0));
+    }
+
+    // Nombre que no cabe: se corta al final con "…", por caracteres enteros.
+    std::string cortar_nombre(std::string texto, int size, int maximo)
+    {
+        if (sdl::text::get_width(size, texto) <= maximo) { return texto; }
+        while (!texto.empty() && sdl::text::get_width(size, texto + "…") > maximo)
+        {
+            unsigned char quitado{};
+            do {
+                quitado = static_cast<unsigned char>(texto.back());
+                texto.pop_back();
+            } while (!texto.empty() && (quitado & 0xC0) == 0x80);
+        }
+        return texto + "…";
+    }
+
+    // Ruta que no cabe: se muestra el final, con "…" al inicio. Se quita de a un caracter entero (UTF-8).
+    std::string final_de_ruta(std::string ruta, int size, int maximo)
+    {
+        if (sdl::text::get_width(size, ruta) <= maximo) { return ruta; }
+        while (!ruta.empty() && sdl::text::get_width(size, "…" + ruta) > maximo)
+        {
+            size_t largo = 1;
+            const unsigned char c = static_cast<unsigned char>(ruta[0]);
+            if (c >= 0xF0) { largo = 4; }
+            else if (c >= 0xE0) { largo = 3; }
+            else if (c >= 0xC0) { largo = 2; }
+            ruta.erase(0, std::min(largo, ruta.size()));
+        }
+        return "…" + ruta;
+    }
 }
 
 //                      ---- Construction ----
@@ -51,35 +96,59 @@ void FileModeState::update()
 
 void FileModeState::render()
 {
-    // Coords for divider lines.
-    static constexpr int LINE_A_X = 617;
-    static constexpr int LINE_B_X = 618;
-
-    // Shared.
-    static constexpr int LINE_Y_A = 0;
-    static constexpr int LINE_Y_B = 538;
+    static constexpr int ANCHO  = 1250;
+    static constexpr int ALTO   = 555;
+    static constexpr int MITAD  = 617;
+    static constexpr int TOPE_Y = 44; // lo de arriba de cada panel: la ruta
 
     const bool hasFocus = BaseState::has_focus();
+    const int y         = m_transition.get_y();
 
     sm_renderTarget->clear(colors::TRANSPARENT);
-
-    // This is here so it's rendered underneath the pop-up frame.
     sm_controlGuide->render(sdl::Texture::Null, hasFocus);
 
-    // Center divider lines.
-    sdl::render_line(sm_renderTarget, LINE_A_X, LINE_Y_A, LINE_A_X, LINE_Y_B, colors::WHITE);
-    sdl::render_line(sm_renderTarget, LINE_B_X, LINE_Y_A, LINE_B_X, LINE_Y_B, colors::DIALOG_DARK);
+    // Rediseno: panel del tema con borde (en lugar del marco de imagen) y la ruta de cada lado arriba;
+    // la del lado activo, resaltada.
+    sdl::render_rect_fill(sdl::Texture::Null, PERMA_X, y, ANCHO, ALTO, colors::PANEL_SOLID);
+    sdl::render_line(sdl::Texture::Null, PERMA_X, y, PERMA_X + ANCHO, y, colors::DIV_COLOR);
+    sdl::render_line(sdl::Texture::Null, PERMA_X, y + ALTO, PERMA_X + ANCHO, y + ALTO, colors::DIV_COLOR);
+    sdl::render_line(sdl::Texture::Null, PERMA_X, y, PERMA_X, y + ALTO, colors::DIV_COLOR);
+    sdl::render_line(sdl::Texture::Null, PERMA_X + ANCHO, y, PERMA_X + ANCHO, y + ALTO, colors::DIV_COLOR);
 
-    // Menus
-    m_dirMenuA->render(sm_renderTarget, hasFocus && m_target == Target::MountA);
-    m_dirMenuB->render(sm_renderTarget, hasFocus && m_target == Target::MountB);
+    const bool activaA = m_target == Target::MountA;
+    sdl::render_line(sm_renderTarget, MITAD, 0, MITAD, 538, colors::DIV_COLOR);
+    sdl::render_rect_fill(sm_renderTarget, activaA ? 0 : MITAD + 1, 0, activaA ? MITAD : 1234 - MITAD - 1, 3, colors::BLUE_GREEN);
+    // Ruta y, a la derecha, el espacio libre de esa unidad.
+    for (int lado = 0; lado < 2; lado++)
+    {
+        const bool esA           = lado == 0;
+        const fslib::Path &ruta  = esA ? m_pathA : m_pathB;
+        const int baseX         = esA ? 0 : MITAD + 1;
+        const std::string libre = tamano_corto(fslib::get_device_free_space(fslib::Path{(esA ? m_mountA : m_mountB) + ":/"}));
+        const std::string txt   = stringutil::get_formatted_string(strings::tr("%s free", "%s libres"), libre.c_str());
+        const int lw            = sdl::text::get_width(16, txt);
+        sdl::text::render(sm_renderTarget, baseX + 600 - lw - 20, 14, 16, sdl::text::NO_WRAP, colors::DIALOG_LIGHT, txt);
+        sdl::text::render(sm_renderTarget, baseX + 16, 12, 18, sdl::text::NO_WRAP, (esA == activaA) ? colors::BLUE_GREEN : colors::DIALOG_LIGHT,
+                          final_de_ruta(ruta.string(), 18, 580 - lw - 40));
+    }
+    sdl::render_line(sm_renderTarget, 0, TOPE_Y, 1234, TOPE_Y, colors::DIV_COLOR);
 
-    // Frame.
-    sm_frame->render(sdl::Texture::Null, true);
+    FileModeState::dibujar_lista(Target::MountA, 0, MITAD, hasFocus && activaA);
+    FileModeState::dibujar_lista(Target::MountB, MITAD + 1, 1234 - MITAD - 1, hasFocus && !activaA);
 
-    // Main target.
-    const int y = m_transition.get_y();
-    sm_renderTarget->render(sdl::Texture::Null, 23, y + 12);
+    // Dentro del panel, abajo: el orden y las marcas del lado activo (fuera del panel lo tapaba la barra de
+    // controles).
+    {
+        const char *modo = m_modoOrden == 0 ? strings::tr("name", "nombre") : m_modoOrden == 1 ? strings::tr("size", "tamaño") : strings::tr("type", "tipo");
+        const int marcas = static_cast<int>((activaA ? m_marcasA : m_marcasB).size());
+        std::string pie  = marcas > 0 ? stringutil::get_formatted_string(strings::tr("%d marked  ·  X: copy, move or delete them", "%d marcados  ·  X: copiarlos, moverlos o borrarlos"), marcas)
+                                      : std::string{strings::tr("A or Y on a file: mark it  ·  X: options", "A o Y sobre un archivo: marcarlo  ·  X: opciones")};
+        pie += stringutil::get_formatted_string(strings::tr("  ·  R: sort by %s", "  ·  R: orden por %s"), modo);
+        sdl::render_line(sm_renderTarget, 0, 504, 1234, 504, colors::DIV_COLOR);
+        sdl::text::render(sm_renderTarget, 16, 512, 16, sdl::text::NO_WRAP, marcas > 0 ? colors::BLUE_GREEN : colors::DIALOG_LIGHT, pie);
+    }
+
+    sm_renderTarget->render(sdl::Texture::Null, PERMA_X + 8, y + 8);
 }
 
 //                      ---- Private functions ----
@@ -119,7 +188,7 @@ void FileModeState::initialize_menus()
     static constexpr int MENU_B_X = 630;
 
     // Shared.
-    static constexpr int MENU_Y             = 5;
+    static constexpr int MENU_Y             = 52; // debajo de la ruta
     static constexpr int MENU_WIDTH         = 594;
     static constexpr int MENU_FONT_SIZE     = 20;
     static constexpr int MENU_TARGET_HEIGHT = 538;
@@ -133,25 +202,44 @@ void FileModeState::initialize_menus()
 
 void FileModeState::initialize_directory_menu(const fslib::Path &path, fslib::Directory &directory, ui::Menu &menu)
 {
-    static constexpr const char *DIR_PREFIX  = "[D] ";
-    static constexpr const char *FILE_PREFIX = "[F] ";
 
     directory.open(path);
     if (!directory.is_open()) { return; }
 
+    // Rediseno: sin [D]/[F]. Las carpetas van en el color del tema y terminan en "/"; los archivos, normal.
     menu.reset();
-    menu.add_option(".");
-    menu.add_option("..");
+    menu.add_option(strings::tr("This folder", "Esta carpeta"));
+    menu.add_option(strings::tr("Up one level", "Subir un nivel"));
 
-    for (const fslib::DirectoryEntry &entry : directory)
-    {
-        std::string option{};
-        if (entry.is_directory()) { option = DIR_PREFIX; }
-        else { option = FILE_PREFIX; }
-
-        option += entry.get_filename();
-        menu.add_option(option);
-    }
+    // Orden: carpetas primero y luego segun el modo (nombre, tamano o tipo). La lista guarda el orden y las
+    // marcas se limpian al cambiar de carpeta.
+    const bool ladoA            = &directory == &m_dirA;
+    std::vector<int> &orden     = ladoA ? m_ordenA : m_ordenB;
+    (ladoA ? m_marcasA : m_marcasB).clear();
+    orden.clear();
+    for (int i = 0; i < static_cast<int>(directory.get_count()); i++) { orden.push_back(i); }
+    auto minus = [](const char *t) {
+        std::string r{t};
+        for (char &c : r) { c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); }
+        return r;
+    };
+    auto extension = [&](const char *t) {
+        const std::string n = minus(t);
+        const size_t punto  = n.find_last_of('.');
+        return punto == std::string::npos ? std::string{} : n.substr(punto + 1);
+    };
+    std::stable_sort(orden.begin(), orden.end(), [&](int a, int b) {
+        const fslib::DirectoryEntry &ea = directory[a];
+        const fslib::DirectoryEntry &eb = directory[b];
+        if (ea.is_directory() != eb.is_directory()) { return ea.is_directory(); }
+        if (m_modoOrden == 1 && !ea.is_directory() && ea.get_size() != eb.get_size()) { return ea.get_size() > eb.get_size(); }
+        if (m_modoOrden == 2 && extension(ea.get_filename()) != extension(eb.get_filename()))
+        {
+            return extension(ea.get_filename()) < extension(eb.get_filename());
+        }
+        return minus(ea.get_filename()) < minus(eb.get_filename());
+    });
+    for (const int i : orden) { menu.add_option(directory[i].get_filename()); }
 }
 
 void FileModeState::update_y() noexcept
@@ -188,7 +276,26 @@ void FileModeState::update_handle_input() noexcept
     const bool minusPressed = input::button_pressed(HidNpadButton_Minus);
 
     // Conditions
-    if (aPressed) { FileModeState::enter_selected(path, directory, menu); }
+    const bool yPressed = input::button_pressed(HidNpadButton_Y);
+    const bool rPressed = input::button_pressed(HidNpadButton_R);
+    if (yPressed)
+    {
+        // Marcar o desmarcar la fila elegida para copiar, mover o borrar varias a la vez.
+        const int real = indice_real(m_target, menu.get_selected());
+        if (real >= 0)
+        {
+            std::set<int> &marcas = m_target == Target::MountA ? m_marcasA : m_marcasB;
+            if (!marcas.erase(real)) { marcas.insert(real); }
+        }
+    }
+    else if (rPressed)
+    {
+        // Cambiar el orden: nombre, tamano, tipo.
+        m_modoOrden = (m_modoOrden + 1) % 3;
+        FileModeState::initialize_directory_menu(m_pathA, m_dirA, *m_dirMenuA.get());
+        FileModeState::initialize_directory_menu(m_pathB, m_dirB, *m_dirMenuB.get());
+    }
+    else if (aPressed) { FileModeState::enter_selected(path, directory, menu); }
     else if (bPressed) { FileModeState::up_one_directory(path, directory, menu); }
     else if (xPressed) { FileModeState::open_option_menu(directory, menu); }
     else if (zlZRPressed) { FileModeState::change_target(); }
@@ -213,9 +320,16 @@ void FileModeState::enter_selected(fslib::Path &path, fslib::Directory &director
         case 1: FileModeState::up_one_directory(path, directory, menu); break;
         default:
         {
-            const int dirIndex                 = selected - 2;
+            const int dirIndex                 = indice_real(m_target, selected);
+            if (dirIndex < 0) { break; }
             const fslib::DirectoryEntry &entry = directory[dirIndex];
             if (entry.is_directory()) { FileModeState::enter_directory(path, directory, menu, entry); }
+            else
+            {
+                // Rediseno: A sobre un archivo lo marca o desmarca (antes no hacia nada).
+                std::set<int> &marcas = m_target == Target::MountA ? m_marcasA : m_marcasB;
+                if (!marcas.erase(dirIndex)) { marcas.insert(dirIndex); }
+            }
         }
         break;
     }
@@ -287,4 +401,91 @@ void FileModeState::deactivate_state() noexcept
 
     // Mark the state for deletion.
     BaseState::deactivate();
+}
+
+int FileModeState::indice_real(Target lado, int fila) const
+{
+    const std::vector<int> &orden = lado == Target::MountA ? m_ordenA : m_ordenB;
+    const int i                   = fila - 2;
+    return (i >= 0 && i < static_cast<int>(orden.size())) ? orden[i] : -1;
+}
+
+std::vector<int> FileModeState::marcadas(Target lado) const
+{
+    const std::set<int> &marcas = lado == Target::MountA ? m_marcasA : m_marcasB;
+    return std::vector<int>(marcas.begin(), marcas.end());
+}
+
+void FileModeState::limpiar_marcas(Target lado) { (lado == Target::MountA ? m_marcasA : m_marcasB).clear(); }
+
+void FileModeState::dibujar_lista(Target lado, int x, int ancho, bool activa)
+{
+    static constexpr int ARRIBA = 52;
+    static constexpr int ABAJO  = 504; // debajo va el aviso de marcas y orden
+    static constexpr int ALTO   = ABAJO - ARRIBA;
+    static constexpr int FILA   = 38;
+
+    const bool esA                = lado == Target::MountA;
+    ui::Menu &menu                = esA ? *m_dirMenuA : *m_dirMenuB;
+    fslib::Directory &dir         = esA ? m_dirA : m_dirB;
+    const std::vector<int> &orden = esA ? m_ordenA : m_ordenB;
+    const std::set<int> &marcas   = esA ? m_marcasA : m_marcasB;
+    double &scroll                = esA ? m_scrollA : m_scrollB;
+    const int total               = 2 + static_cast<int>(orden.size());
+    const int elegida             = menu.get_selected();
+
+    // Desplazamiento suave para que la elegida quede a la vista.
+    {
+        const double arriba = elegida * FILA - FILA * 2;
+        const double abajo  = (elegida + 1) * FILA + FILA * 2 - ALTO;
+        double objetivo     = scroll;
+        if (arriba < objetivo) { objetivo = arriba < 0 ? 0 : arriba; }
+        else if (abajo > objetivo) { objetivo = abajo; }
+        scroll += (objetivo - scroll) / 3.0;
+    }
+    const int d = static_cast<int>(scroll);
+
+    for (int fila = 0; fila < total; fila++)
+    {
+        const int fy = ARRIBA + fila * FILA - d;
+        if (fy < ARRIBA - 4 || fy + FILA > ABAJO) { continue; }
+        const bool sel = fila == elegida;
+        if (sel)
+        {
+            sdl::render_rect_fill(sm_renderTarget, x + 4, fy + 1, ancho - 8, FILA - 2, colors::DIALOG_DARK);
+            sdl::render_rect_fill(sm_renderTarget, x + 4, fy + 1, 4, FILA - 2, activa ? colors::BLUE_GREEN : colors::DIV_COLOR);
+        }
+        if (fila < 2)
+        {
+            const char *t = fila == 0 ? strings::tr("This folder", "Esta carpeta") : strings::tr("Up one level", "Subir un nivel");
+            sdl::text::render(sm_renderTarget, x + 20, fy + 9, 18, sdl::text::NO_WRAP, colors::DIALOG_LIGHT, t);
+            continue;
+        }
+        const int real = orden[fila - 2];
+        const fslib::DirectoryEntry &e = dir[real];
+        int tx = x + 20;
+        // Casilla de marca: rellena con check si esta marcada.
+        if (!marcas.empty() || sel)
+        {
+            const bool marcada = marcas.count(real) > 0;
+            if (marcada) { sdl::render_rect_fill(sm_renderTarget, tx, fy + 10, 18, 18, colors::BLUE_GREEN); }
+            else
+            {
+                sdl::render_line(sm_renderTarget, tx, fy + 10, tx + 17, fy + 10, colors::DIV_COLOR);
+                sdl::render_line(sm_renderTarget, tx, fy + 27, tx + 17, fy + 27, colors::DIV_COLOR);
+                sdl::render_line(sm_renderTarget, tx, fy + 10, tx, fy + 27, colors::DIV_COLOR);
+                sdl::render_line(sm_renderTarget, tx + 17, fy + 10, tx + 17, fy + 27, colors::DIV_COLOR);
+            }
+            tx += 28;
+        }
+        std::string tam{};
+        if (!e.is_directory()) { tam = tamano_corto(e.get_size()); }
+        const int tw = tam.empty() ? 0 : sdl::text::get_width(16, tam);
+        std::string nombre{e.get_filename()};
+        if (e.is_directory()) { nombre += "/"; }
+        nombre = cortar_nombre(nombre, 19, ancho - (tx - x) - tw - 40);
+        sdl::text::render(sm_renderTarget, tx, fy + 9, 19, sdl::text::NO_WRAP,
+                          e.is_directory() ? colors::BLUE_GREEN : (sel ? colors::WHITE : colors::WHITE), nombre);
+        if (!tam.empty()) { sdl::text::render(sm_renderTarget, x + ancho - tw - 18, fy + 11, 16, sdl::text::NO_WRAP, colors::DIALOG_LIGHT, tam); }
+    }
 }

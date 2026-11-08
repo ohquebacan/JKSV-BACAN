@@ -40,6 +40,9 @@ class WebDavFormState final : public BaseState
         /// @brief Field/action menu.
         std::shared_ptr<ui::Menu> m_menu{};
 
+        /// @brief Rediseno: desplazamiento de la lista.
+        double m_desplazamiento{};
+
         /// @brief Render target.
         sdl::SharedTexture m_renderTarget{};
 

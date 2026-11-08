@@ -3,6 +3,7 @@
 #include "appstates/BackupMenuState.hpp"
 #include "config/config.hpp"
 #include "graphics/colors.hpp"
+#include "ui/ListaSecciones.hpp"
 #include "graphics/screen.hpp"
 #include "input.hpp"
 #include "keyboard/keyboard.hpp"
@@ -66,9 +67,9 @@ void CloudFolderPickerState::render()
     m_renderTarget->clear(colors::TRANSPARENT);
     m_menu->render(m_renderTarget, hasFocus);
 
-    sdl::render_rect_fill(sdl::Texture::Null, 0, 0, graphics::SCREEN_WIDTH, graphics::SCREEN_HEIGHT, colors::CLEAR_COLOR);
-    sdl::text::render(sdl::Texture::Null, 24, 48, 22, sdl::text::NO_WRAP, colors::WHITE, strings::tr("Pick this game's cloud folder:", "Elige la carpeta de la nube de este juego:"));
-    m_renderTarget->render(sdl::Texture::Null, 201, 91);
+    // Rediseno: marco comun con el titulo; la lista usa el menu nuevo.
+    ui::lista::marco(strings::tr("This game's cloud folder", "Carpeta de la nube de este juego"));
+    m_renderTarget->render(sdl::Texture::Null, 160, 104);
     m_controlGuide->render(sdl::Texture::Null, hasFocus);
 }
 

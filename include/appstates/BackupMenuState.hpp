@@ -4,6 +4,7 @@
 #include "appstates/BaseState.hpp"
 #include "data/data.hpp"
 #include "fslib.hpp"
+#include "partidas.hpp"
 #include "remote/remote.hpp"
 #include "sdl.hpp"
 #include "sys/sys.hpp"
@@ -62,7 +63,8 @@ class BackupMenuState final : public BaseState
         {
             Null,
             Local,
-            Remote
+            Remote,
+            Partida // partida completa del catalogo de OQB (partidas.json)
         };
 
         /// @brief The menu entry. Stores the type and the index in the respective target (remote/local)
@@ -101,6 +103,9 @@ class BackupMenuState final : public BaseState
 
             /// @brief Signals whether or not the backup fuctions should kill the task when finished. This is so they can be reused.
             bool killTask = false; 
+
+            std::string url{};  // partida completa a descargar
+            std::string raiz{}; // carpeta de la partida dentro del archivo
         };
         // clang-format on
 
@@ -129,11 +134,17 @@ class BackupMenuState final : public BaseState
         /// @brief Remote storage listing of the current parent.
         remote::Storage::DirectoryListing m_remoteListing{};
 
+        std::vector<partidas::Partida> m_partidas{}; // partidas completas del catalogo para este juego
+
         /// @brief This is the scrolling text at the top.
         std::shared_ptr<ui::TextScroll> m_titleScroll{};
 
         /// @brief Variable that saves whether or not the filesystem has data in it.
         bool m_saveHasData{};
+
+        /// @brief Rediseno: lo que se ve en la columna del juego.
+        int64_t m_tamanoPartida{};
+        std::string m_ultimaPartida{};
 
         /// @brief Frames ZL has been held; the cloud-folder picker opens once this reaches ~1 second.
         int m_zlHoldFrames{};
@@ -188,6 +199,14 @@ class BackupMenuState final : public BaseState
 
         /// @brief This function is called to confirm restoring a backup.
         void confirm_restore();
+
+        void confirm_partida();
+
+        /// @brief Rediseno: la lista con secciones, etiquetas y fechas legibles.
+        void render_lista(sdl::SharedTexture &target, bool hasFocus);
+
+        /// @brief Desplazamiento de la lista (suave).
+        double m_listaY{};
 
         /// @brief Function called to confirm deleting a backup.
         void confirm_delete();

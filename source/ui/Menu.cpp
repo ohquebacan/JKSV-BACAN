@@ -54,18 +54,19 @@ void ui::Menu::render(sdl::SharedTexture &target, bool hasFocus)
 
         m_optionTarget->clear(colors::TRANSPARENT);
 
+        // Rediseno: la elegida con fondo y una barra del color del tema (antes, un recuadro azul que
+        // parpadeaba); las demas, con una linea fina debajo.
         if (i == m_selected)
         {
-            if (hasFocus)
-            {
-                m_boundingBox->set_x(m_x - 4);
-                m_boundingBox->set_y(tempY - 4);
-                m_boundingBox->render(target, hasFocus);
-            }
-            sdl::render_rect_fill(m_optionTarget, 8, 8, 4, m_optionHeight - 12, colors::BLUE_GREEN);
+            sdl::render_rect_fill(m_optionTarget, 0, 2, m_width, m_optionHeight - 4, colors::DIALOG_DARK);
+            sdl::render_rect_fill(m_optionTarget, 0, 2, 5, m_optionHeight - 4, hasFocus ? colors::BLUE_GREEN : colors::DIV_COLOR);
             m_optionScroll->render(m_optionTarget, hasFocus);
         }
-        else { sdl::text::render(m_optionTarget, 24, m_textY, m_fontSize, sdl::text::NO_WRAP, colors::WHITE, m_options[i]); }
+        else
+        {
+            sdl::text::render(m_optionTarget, 24, m_textY, m_fontSize, sdl::text::NO_WRAP, colors::WHITE, m_options[i]);
+            sdl::render_line(m_optionTarget, 16, m_optionHeight - 1, m_width - 16, m_optionHeight - 1, colors::DIV_COLOR);
+        }
         // render target to target
         m_optionTarget->render(target, m_x, tempY);
     }

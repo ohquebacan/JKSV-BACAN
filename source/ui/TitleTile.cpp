@@ -2,16 +2,20 @@
 
 #include "graphics/colors.hpp"
 #include "logging/logger.hpp"
+#include "ui/ListaSecciones.hpp"
 
 namespace
 {
-    constexpr int UNSELECTED_WIDTH_HEIGHT = 128;
-    constexpr int SELECTED_WIDTH_HEIGHT   = 176;
+    // Rediseno: todos del mismo tamano; la seleccion la marca un aro, no un zoom.
+    constexpr int UNSELECTED_WIDTH_HEIGHT = ui::TitleTile::SIZE;
+    constexpr int SELECTED_WIDTH_HEIGHT   = ui::TitleTile::SIZE;
+    constexpr int NAME_SIZE               = 16;
+
 }
 
 //                      ---- Construction ----
 
-ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon, bool hasCloudBackup, bool hasLocalBackup)
+ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon, bool hasCloudBackup, bool hasLocalBackup, bool hasPartida, std::string name)
     : m_transition(0,
                    0,
                    UNSELECTED_WIDTH_HEIGHT,
@@ -24,6 +28,8 @@ ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon, bo
     , m_isFavorite(isFavorite)
     , m_hasCloudBackup(hasCloudBackup)
     , m_hasLocalBackup(hasLocalBackup)
+    , m_hasPartida(hasPartida)
+    , m_name(std::move(name))
     , m_index(index)
     , m_icon(icon) {};
 
@@ -32,6 +38,7 @@ ui::TitleTile::TitleTile(bool isFavorite, int index, sdl::SharedTexture icon, bo
 void ui::TitleTile::update(int selected)
 {
     const bool isSelected = selected == m_index;
+    m_isSelected          = isSelected;
 
     if (isSelected)
     {
@@ -49,49 +56,73 @@ void ui::TitleTile::update(int selected)
 
 void ui::TitleTile::render(sdl::SharedTexture &target, int x, int y)
 {
-    static constexpr std::string_view HEART_CHAR = "\uE017";
 
     const int width   = m_transition.get_width();
     const int height  = m_transition.get_height();
-    const int renderX = x - ((width - 128) / 2);
-    const int renderY = y - ((width - 128) / 2);
+    const int renderX = x - ((width - SIZE) / 2);
+    const int renderY = y - ((width - SIZE) / 2);
 
     m_icon->render_stretched(target, renderX, renderY, width, height);
-    if (m_isFavorite) { sdl::text::render(target, renderX + 2, renderY + 2, 28, sdl::text::NO_WRAP, colors::PINK, HEART_CHAR); }
-    if (m_hasCloudBackup)
+    // Esquinas redondeadas: una mascara del color del fondo encima del icono.
+    if (!sm_mask) { sm_mask = sdl::TextureManager::load("tileMask", "romfs:/Textures/TileMask.png"); }
+    if (sm_mask)
     {
-        // Cloud icon in the top-right corner = this game has a backup on the remote storage.
-        if (!sm_cloudIcon) { sm_cloudIcon = sdl::TextureManager::load("cloudBadge", "romfs:/Textures/CloudBadge.png"); }
-        if (sm_cloudIcon)
+        sm_mask->set_color_mod(colors::CLEAR_COLOR);
+        sm_mask->render_stretched(target, renderX, renderY, width, height);
+    }
+    // Nombre debajo, en el color de seleccion si es el elegido.
+    // El nombre en dos lineas como mucho, repartido por palabras y cortado con "…" (al dibujar: medir texto
+    // carga glifos, que son texturas de SDL, y la cuadricula a veces se rearma desde otro hilo).
+    if (!m_nameReady)
+    {
+        m_lineas    = ui::lista::partir(m_name, NAME_SIZE, SIZE, 2);
+        m_nameReady = true;
+    }
+    for (size_t l = 0; l < m_lineas.size(); l++)
+    {
+        sdl::text::render(target, renderX, renderY + height + 8 + static_cast<int>(l) * 21, NAME_SIZE, sdl::text::NO_WRAP,
+                          m_isSelected ? colors::BLUE_GREEN : colors::DIALOG_LIGHT, m_lineas[l]);
+    }
+    // Rediseno (como el mockup): abajo a la izquierda, respaldo en la consola y luego nube; arriba a la
+    // derecha, la partida completa; abajo a la derecha, el favorito. Todas suavizadas.
+    if (!sm_badgeBase) { sm_badgeBase = sdl::TextureManager::load("badgeBase", "romfs:/Textures/BadgeBase.png"); }
+    if (!sm_badgeCheck) { sm_badgeCheck = sdl::TextureManager::load("badgeCheck", "romfs:/Textures/BadgeCheck.png"); }
+    if (!sm_cloudIcon) { sm_cloudIcon = sdl::TextureManager::load("cloudGlyph", "romfs:/Textures/CloudGlyph.png"); }
+
+    const int badge = width / 5;
+    int bx          = renderX + 8;
+    const int by    = renderY + height - badge - 8;
+    if (m_hasLocalBackup && sm_badgeBase && sm_badgeCheck)
+    {
+        sm_badgeBase->set_color_mod(colors::BLUE_GREEN);
+        sm_badgeBase->render_stretched(target, bx, by, badge, badge);
+        sm_badgeCheck->set_color_mod(colors::CLEAR_COLOR);
+        sm_badgeCheck->render_stretched(target, bx, by, badge, badge);
+        bx += badge + 5;
+    }
+    if (m_hasCloudBackup && sm_badgeBase && sm_cloudIcon)
+    {
+        static constexpr sdl::Color CLARO = {0xECEFEAFF};
+        sm_badgeBase->set_color_mod(CLARO);
+        sm_badgeBase->render_stretched(target, bx, by, badge, badge);
+        sm_cloudIcon->set_color_mod(colors::CLEAR_COLOR);
+        sm_cloudIcon->render_stretched(target, bx, by, badge, badge);
+    }
+    if (m_hasPartida)
+    {
+        if (!sm_partida) { sm_partida = sdl::TextureManager::load("partidaBadge", "romfs:/Textures/Partida.png"); }
+        if (sm_partida)
         {
-            const int badge  = width / 4;
-            const int badgeX = renderX + width - badge - 4;
-            const int badgeY = renderY + 4;
-            sm_cloudIcon->render_stretched(target, badgeX, badgeY, badge, badge);
+            const int pw = width * 48 / 100;
+            const int ph = pw * 40 / 104;
+            sm_partida->render_stretched(target, renderX + width - pw - 8, renderY + 8, pw, ph);
         }
     }
-    if (m_hasLocalBackup)
+    if (m_isFavorite)
     {
-        // Local-backup badge: a green square with a white check in the bottom-right corner. Distinct corner
-        // and colour from the cloud badge so a game with both backups shows two separate markers.
-        static constexpr sdl::Color LOCAL_GREEN = {0x33CC55FF};
-        const int badge  = width / 5;
-        const int badgeX = renderX + width - badge - 5;
-        const int badgeY = renderY + height - badge - 5;
-
-        sdl::render_rect_fill(target, badgeX - 2, badgeY - 2, badge + 4, badge + 4, colors::WHITE); // border
-        sdl::render_rect_fill(target, badgeX, badgeY, badge, badge, LOCAL_GREEN);                   // fill
-
-        // White check: two strokes (down to the bottom vertex, then up to the top-right). Drawn a few times
-        // with a 1px offset so it stays legible at tile size.
-        const int ax = badgeX + badge * 24 / 100, ay = badgeY + badge * 52 / 100;
-        const int bx = badgeX + badge * 42 / 100, by = badgeY + badge * 70 / 100;
-        const int cx = badgeX + badge * 78 / 100, cy = badgeY + badge * 28 / 100;
-        for (int t = 0; t < 3; t++)
-        {
-            sdl::render_line(target, ax, ay + t, bx, by + t, colors::WHITE);
-            sdl::render_line(target, bx, by + t, cx, cy + t, colors::WHITE);
-        }
+        static constexpr std::string_view HEART = "\uE017";
+        const int hw = sdl::text::get_width(24, HEART);
+        sdl::text::render(target, renderX + width - hw - 10, by + (badge - 24) / 2, 24, sdl::text::NO_WRAP, colors::PINK, HEART);
     }
 }
 

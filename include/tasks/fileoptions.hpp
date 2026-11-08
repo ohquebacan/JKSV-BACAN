@@ -9,4 +9,10 @@ namespace tasks::fileoptions
 
     /// @brief Deletes the source path passed through taskData
     void delete_target(sys::threadpool::JobData taskData);
+
+    /// @brief Rediseno: copia o mueve (data->mover) cada fuente a su destino, uno tras otro.
+    void copiar_varios(sys::threadpool::JobData taskData);
+
+    /// @brief Rediseno: borra cada fuente.
+    void borrar_varios(sys::threadpool::JobData taskData);
 }

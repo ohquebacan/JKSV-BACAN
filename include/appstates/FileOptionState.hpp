@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 #include "StateManager.hpp"
 #include "appstates/BaseState.hpp"
 #include "appstates/FileModeState.hpp"
@@ -46,6 +47,9 @@ class FileOptionState final : public BaseState
         {
             fslib::Path sourcePath{};
             fslib::Path destPath{};
+            std::vector<fslib::Path> fuentes{};  // rediseno: varios a la vez
+            std::vector<fslib::Path> destinos{};
+            bool mover{};
             int64_t journalSize{};
             FileOptionState *spawningState{};
         };
@@ -104,7 +108,7 @@ class FileOptionState final : public BaseState
         void update_filemode_dest();
 
         /// @brief Sets up and begins the copy task.
-        void copy_target();
+        void copy_target(bool mover);
 
         /// @brief Sets up and begins the delete task.
         void delete_target();

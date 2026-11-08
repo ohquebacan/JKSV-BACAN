@@ -5,7 +5,9 @@
 #include "sdl.hpp"
 #include "ui/ui.hpp"
 
+#include <set>
 #include <string_view>
+#include <vector>
 
 class FileModeState final : public BaseState
 {
@@ -74,6 +76,27 @@ class FileModeState final : public BaseState
         std::shared_ptr<ui::Menu> m_dirMenuB{};
 
         /// @brief Stores whether the instance is dealing with sensitive data.
+        // Rediseno: orden de cada lado (fila de la lista -> indice en el directorio), marcas para operar con
+        // varios a la vez y el desplazamiento de cada lista.
+        std::vector<int> m_ordenA{};
+        std::vector<int> m_ordenB{};
+        std::set<int> m_marcasA{};
+        std::set<int> m_marcasB{};
+        double m_scrollA{};
+        double m_scrollB{};
+        int m_modoOrden{}; // 0 nombre, 1 tamano, 2 tipo (siempre carpetas primero)
+
+        /// @brief Indice en el directorio de la fila elegida de ese lado (fila >= 2). -1 si no hay.
+        int indice_real(Target lado, int fila) const;
+
+        /// @brief Indices marcados de ese lado (vacio si no hay marcas).
+        std::vector<int> marcadas(Target lado) const;
+
+        void limpiar_marcas(Target lado);
+
+        /// @brief Dibuja una lista con nombre, tamano y marcas.
+        void dibujar_lista(Target lado, int x, int ancho, bool activa);
+
         bool m_isSystem{};
 
         /// @brief Stores the config setting from config to allow writing to the sensitive parts of the system.

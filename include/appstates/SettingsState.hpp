@@ -27,6 +27,9 @@ class SettingsState final : public BaseState
         /// @brief Menu for selecting and toggling settings.
         std::shared_ptr<ui::Menu> m_settingsMenu{};
 
+        /// @brief Rediseno: desplazamiento de la lista por secciones.
+        double m_desplazamiento{};
+
         // These are pointers to strings this state uses constantly.
         const char *m_onOff[2]{};
         const char *m_sortTypes[3]{};

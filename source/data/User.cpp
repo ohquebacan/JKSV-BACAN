@@ -1,5 +1,8 @@
 #include "data/User.hpp"
 
+#include <string>
+#include <string_view>
+
 #include "config/config.hpp"
 #include "data/data.hpp"
 #include "error.hpp"
@@ -32,6 +35,19 @@ namespace
 
 // Function used to sort user data. Definition at the bottom.
 static bool sort_user_data(const data::UserDataEntry &entryA, const data::UserDataEntry &entryB);
+
+// Rediseno: los usuarios sin foto (Dispositivo, BCAT, Sistema...) llevan su inicial grande en el circulo.
+// Con el nombre entero no cabia y se cortaba. Se toma el primer caracter completo (UTF-8).
+static std::string inicial(std::string_view nombre)
+{
+    if (nombre.empty()) { return "?"; }
+    size_t largo = 1;
+    const unsigned char c = static_cast<unsigned char>(nombre[0]);
+    if (c >= 0xF0) { largo = 4; }
+    else if (c >= 0xE0) { largo = 3; }
+    else if (c >= 0xC0) { largo = 2; }
+    return std::string{nombre.substr(0, largo)};
+}
 
 //                      ---- Construction ----
 
@@ -230,7 +246,7 @@ void data::User::load_icon()
         const bool sizeError    = !profileError && error::libnx(accountProfileGetImageSize(&profile, &iconSize));
         if (profileError || sizeError)
         {
-            m_icon = gfxutil::create_generic_icon(m_nickname, SIZE_ICON_FONT, colors::DIALOG_DARK, colors::WHITE);
+            m_icon = gfxutil::create_generic_icon(inicial(m_nickname), 120, colors::DIALOG_DARK, colors::WHITE);
             return;
         }
 
@@ -241,7 +257,7 @@ void data::User::load_icon()
         accountProfileClose(&profile);
         m_icon = sdl::TextureManager::load(iconName, iconBuffer.get(), iconSize);
     }
-    else { m_icon = gfxutil::create_generic_icon(m_nickname, SIZE_ICON_FONT, colors::DIALOG_DARK, colors::WHITE); }
+    else { m_icon = gfxutil::create_generic_icon(inicial(m_nickname), 120, colors::DIALOG_DARK, colors::WHITE); }
 }
 
 void data::User::load_account(AccountProfile &profile, AccountProfileBase &profileBase)

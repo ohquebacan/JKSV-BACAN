@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include "StateManager.hpp"
 #include "appstates/TitleSelectCommon.hpp"
 #include "data/data.hpp"
@@ -51,6 +52,11 @@ class TitleSelectState final : public TitleSelectCommon
 
         /// @brief Tiled title selection view.
         std::shared_ptr<ui::TitleView> m_titleView{};
+
+        // Rediseno: respaldos del juego elegido, leidos una vez por seleccion.
+        int m_cacheEntrada{-2};
+        int m_cacheRespaldos{};
+        std::string m_cacheMasNuevo{};
 
         /// @brief Checks if the user still has any games left to list. This is a safety measure.
         bool title_count_check();

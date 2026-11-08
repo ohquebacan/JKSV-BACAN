@@ -89,12 +89,15 @@ void ProgressState::render()
     sdl::render_line(sdl::Texture::Null, 280, 421, 999, 421, colors::DIV_COLOR);
 
     // Progress showing bar.
-    sdl::render_rect_fill(sdl::Texture::Null, COORD_BAR_X, COORD_BAR_Y, barWidth, 32, colors::BLACK);
+    sdl::render_rect_fill(sdl::Texture::Null, COORD_BAR_X, COORD_BAR_Y, barWidth, 32, colors::CLEAR_COLOR);
     sdl::render_rect_fill(sdl::Texture::Null, COORD_BAR_X, COORD_BAR_Y, m_progressBarWidth, 32, colors::BAR_GREEN);
 
-    // These are the "caps" to round the edges of the bar.
-    sm_barEdges->render_part(sdl::Texture::Null, COORD_BAR_X, COORD_BAR_Y, 0, 0, 16, 32);
-    sm_barEdges->render_part(sdl::Texture::Null, RIGHT_EDGE_X, COORD_BAR_Y, 16, 0, 16, 32);
+    // Puntas redondeadas: tapas suavizadas del color del cuadro (las grises fijas no combinaban con el tema).
+    static sdl::SharedTexture tapas = sdl::TextureManager::load("barCaps", "romfs:/Textures/BarCaps.png");
+    sdl::SharedTexture &puntas      = tapas ? tapas : sm_barEdges;
+    if (tapas) { tapas->set_color_mod(colors::DIALOG_DARK); }
+    puntas->render_part(sdl::Texture::Null, COORD_BAR_X, COORD_BAR_Y, 0, 0, 16, 32);
+    puntas->render_part(sdl::Texture::Null, RIGHT_EDGE_X, COORD_BAR_Y, 16, 0, 16, 32);
 
     // Progress string.
     sdl::text::render(sdl::Texture::Null,

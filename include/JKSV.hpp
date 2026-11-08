@@ -39,6 +39,9 @@ class JKSV
         /// @brief JKSV icon in upper left corner.
         sdl::SharedTexture m_headerIcon{};
 
+        /// @brief "JKSV BACAN" en Upheaval, prerenderizado (SDLLib solo dibuja con la fuente del sistema).
+        sdl::SharedTexture m_headerTitle{};
+
         /// @brief Stores the translation string.
         std::string m_translationInfo{};
 

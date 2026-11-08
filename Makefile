@@ -40,7 +40,10 @@ INCLUDES	:=	include ./Libraries/FsLib/Switch/FsLib/include ./Libraries/SDLLib/SD
 EXEFS_SRC	:=	exefs_src
 APP_TITLE   :=  JKSV BACÁN
 APP_AUTHOR  :=  JK / OQB
-APP_VERSION :=  2026-06-14 OQB
+# Version de JKSV BACAN: el aviso de actualizacion la compara con la etiqueta del ultimo release
+# (vX.Y-bacan) de ohquebacan/JKSV-BACAN. Subirla en cada release nuevo.
+BACAN_VERSION := 2.8
+APP_VERSION :=  $(BACAN_VERSION) OQB
 ROMFS	    :=	romfs
 ICON		:=	icon.jpg
 
@@ -53,7 +56,7 @@ ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 # my local pkg-config and I don't feel like dealing with CMake for all of this right now.
 CFLAGS	:=	$(INCLUDE) -D__SWITCH__ `sdl2-config --cflags` `curl-config --cflags`\
 			-g -Wall -O3 -Os -ffunction-sections -ffast-math -fmax-errors=1 \
-			-I$(PORTLIBS)/include/freetype2 $(ARCH) $(DEFINES)
+			-I$(PORTLIBS)/include/freetype2 $(ARCH) $(DEFINES) -DBACAN_VERSION=\"$(BACAN_VERSION)\"
 
 CXXFLAGS:= $(CFLAGS) -fno-rtti -fno-exceptions -std=c++23
 
@@ -62,7 +65,8 @@ LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*
 
 LIBS	:=	../Libraries/FsLib/Switch/FsLib/lib/libFsLib.a ../Libraries/SDLLib/SDL/lib/libSDL.a \
 			`sdl2-config --libs` -lfreetype -lharfbuzz `curl-config --libs` -lSDL2_image  \
-			-lwebp -lpng -ljpeg -lz -lminizip -ljson-c -ltinyxml2 -lnx -lbz2 -lz
+			-lwebp -lpng -ljpeg -lz -lminizip -ljson-c -ltinyxml2 \
+			-larchive -lexpat -llzma -llz4 -lzstd -lnx -lbz2 -lz
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
@@ -164,6 +168,10 @@ FsLib:
 #---------------------------------------------------------------------------------
 
 SDLLib:
+	@# JKSV BACAN: la fuente propia (Instrument Sans) va en SDLLib, que es un submodulo del autor original.
+	@# El parche se aplica una sola vez: si ya esta aplicado, el --reverse --check lo detecta y no hace nada.
+	@git -C ./Libraries/SDLLib apply --reverse --check ../../patches/sdllib-fuente-propia.patch 2>/dev/null || \
+		git -C ./Libraries/SDLLib apply ../../patches/sdllib-fuente-propia.patch
 	@$(MAKE) -C ./Libraries/SDLLib/SDL/ -j
 
 #---------------------------------------------------------------------------------

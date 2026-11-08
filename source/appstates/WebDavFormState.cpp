@@ -1,8 +1,11 @@
 #include "appstates/WebDavFormState.hpp"
 
+#include <vector>
+
 #include "error.hpp"
 #include "fslib.hpp"
 #include "graphics/colors.hpp"
+#include "ui/ListaSecciones.hpp"
 #include "graphics/screen.hpp"
 #include "input.hpp"
 #include "json.hpp"
@@ -42,7 +45,7 @@ WebDavFormState::WebDavFormState(std::string_view origin,
                                  std::string_view username,
                                  std::string_view password)
     : m_renderTarget(sdl::TextureManager::load(FORM_TARGET, 1080, 555, SDL_TEXTUREACCESS_TARGET))
-    , m_controlGuide(ui::ControlGuide::create(strings::get_by_name(strings::names::CONTROL_GUIDES, 3)))
+    , m_controlGuide(ui::ControlGuide::create(strings::tr("\uE0E0 Edit   \uE0E1 Back", "\uE0E0 Editar   \uE0E1 Atrás")))
     , m_origin(origin)
     , m_basepath(basepath)
     , m_username(username)
@@ -87,13 +90,33 @@ void WebDavFormState::render()
 {
     const bool hasFocus = BaseState::has_focus();
 
-    m_renderTarget->clear(colors::TRANSPARENT);
-    m_menu->render(m_renderTarget, hasFocus);
+    // Rediseno: secciones con el valor de cada campo a la derecha y la ayuda en el panel.
+    ui::lista::marco(strings::tr("WebDAV connection", "Conexión WebDAV"));
 
-    // Opaque background so the menu underneath us doesn't bleed through.
-    sdl::render_rect_fill(sdl::Texture::Null, 0, 0, graphics::SCREEN_WIDTH, graphics::SCREEN_HEIGHT, colors::CLEAR_COLOR);
-
-    m_renderTarget->render(sdl::Texture::Null, 201, 91);
+    const char *servidor = strings::tr("SERVER", "SERVIDOR");
+    const char *cuenta   = strings::tr("ACCOUNT", "CUENTA");
+    const char *listo    = strings::tr("DONE", "LISTO");
+    std::vector<ui::lista::Fila> filas(6);
+    filas[FIELD_ORIGIN]   = {servidor, strings::tr("Server address", "Dirección del servidor"), m_origin, !m_origin.empty(),
+                             strings::tr("Only https:// and the server name, with no folder. For Koofr: https://app.koofr.net",
+                                         "Solo https:// y el nombre del servidor, sin carpeta. Para Koofr: https://app.koofr.net")};
+    filas[FIELD_BASEPATH] = {servidor, strings::tr("Folder", "Carpeta"), m_basepath, !m_basepath.empty(),
+                             strings::tr("Where your backups go, without a leading /. For Koofr: dav/Koofr/JKSV",
+                                         "Dónde van tus respaldos, sin / al inicio. Para Koofr: dav/Koofr/JKSV")};
+    filas[FIELD_USERNAME] = {cuenta, strings::tr("User", "Usuario"), m_username, !m_username.empty(),
+                             strings::tr("The e-mail or user you sign in with.", "El correo o usuario con el que entras.")};
+    filas[FIELD_PASSWORD] = {cuenta, strings::tr("App password", "Contraseña de aplicación"),
+                             m_password.empty() ? std::string{strings::tr("Empty", "Vacía")} : (m_showPassword ? m_password : mask(m_password)),
+                             !m_password.empty(),
+                             strings::tr("Use an app password, not your account password. In Koofr: Preferences > Password > App passwords.",
+                                         "Usa una contraseña de aplicación, no la de tu cuenta. En Koofr: Preferencias › Contraseña › Contraseñas de aplicación.")};
+    filas[TOGGLE_PASSWORD] = {cuenta, strings::tr("Show password", "Mostrar contraseña"),
+                              m_showPassword ? strings::tr("Visible", "Visible") : strings::tr("Hidden", "Oculta"), m_showPassword,
+                              strings::tr("Shows or hides the password on this screen.", "Muestra u oculta la contraseña en esta pantalla.")};
+    filas[SAVE]           = {listo, strings::tr("Save and connect", "Guardar y conectar"), "", false,
+                             strings::tr("Saves the connection and checks it right away. Your backups go to that folder.",
+                                         "Guarda la conexión y la prueba enseguida. Tus respaldos irán a esa carpeta.")};
+    ui::lista::dibujar(filas, m_menu->get_selected(), m_desplazamiento, hasFocus);
     m_controlGuide->render(sdl::Texture::Null, hasFocus);
 }
 

@@ -1,4 +1,6 @@
 #pragma once
+#include <vector>
+#include <string>
 #include "StateManager.hpp"
 #include "appstates/BaseState.hpp"
 #include "data/data.hpp"
@@ -65,6 +67,22 @@ class MainMenuState final : public BaseState
         /// @brief Icon for the extras option.
         sdl::SharedTexture m_extrasIcon{};
 
+        /// @brief Rediseno: boton Nube en la columna (debajo de Ajustes).
+        sdl::SharedTexture m_cloudIcon{};
+
+        /// @brief Datos de la conexion para la tarjeta de la Nube (se releen al volver a su boton).
+        bool m_nubeLeida{};
+        std::string m_nubeServicio{}, m_nubeServidor{}, m_nubeCarpeta{}, m_nubeUsuario{};
+
+        /// @brief Vista rapida de favoritos en la tarjeta de la Nube: solo datos de la SD, sin red.
+        struct FavoritoNube
+        {
+            std::string nombre{};
+            std::string fecha{}; // clave AAAA-MM-DD_HH-MM-SS del respaldo mas nuevo ("" = sin respaldo)
+        };
+        std::vector<FavoritoNube> m_nubeFavoritos{};
+        int m_nubeConRespaldo{};
+
         /// @brief Special menu type that uses icons.
         std::shared_ptr<ui::IconMenu> m_mainMenu{};
 
@@ -88,6 +106,9 @@ class MainMenuState final : public BaseState
 
         /// @brief This is the pointer to the extras state.
         static inline std::shared_ptr<BaseState> sm_extrasState{};
+
+        /// @brief Configurar nube, abierta desde su boton en la columna.
+        static inline std::shared_ptr<BaseState> sm_cloudState{};
 
         /// @brief This is the vector of title selection states.
         static inline std::vector<std::shared_ptr<BaseState>> sm_states{};

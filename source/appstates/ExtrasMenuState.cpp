@@ -1,5 +1,9 @@
 #include "appstates/ExtrasMenuState.hpp"
 
+#include <vector>
+#include "remote/remote.hpp"
+#include "ui/ListaSecciones.hpp"
+
 #include "appstates/CloudSetupState.hpp"
 #include "appstates/FileModeState.hpp"
 #include "appstates/MainMenuState.hpp"
@@ -30,6 +34,33 @@ namespace
         TERMINATE_PROCESS,
         CLOUD_SETUP
     };
+
+    // Rediseno: orden en pantalla, por secciones, con titulos cortos y para que sirve cada uno.
+    struct Extra
+    {
+        int accion;
+        int seccion;
+        const char *en, *es, *descEn, *descEs;
+    };
+    constexpr Extra ORDEN[] = {
+        {CLOUD_SETUP, 0, "Set up the cloud", "Configurar nube", "Connect Koofr, Nextcloud or another WebDAV server, or Google Drive, to back up your saves online.",
+         "Conecta Koofr, Nextcloud u otro servidor WebDAV, o Google Drive, para respaldar tus partidas en internet."},
+        {REINIT_DATA, 0, "Reload games and saves", "Recargar juegos y partidas", "Reads the console again. Useful after installing or deleting games while JKSV is open.",
+         "Vuelve a leer la consola. Sirve si instalaste o borraste juegos con JKSV abierto."},
+        {SD_TO_SD_BROWSER, 1, "SD card browser", "Explorador de la SD", "Copy, move and delete files on the SD card.",
+         "Copia, mueve y borra archivos de la SD."},
+        {TERMINATE_PROCESS, 1, "Close a running process", "Cerrar un proceso", "Closes a process that keeps a save in use, so it can be backed up.",
+         "Cierra un proceso que tiene una partida en uso, para poder respaldarla."},
+        {BIS_PRODINFO_F, 2, "PRODINFOF partition", "Partición PRODINFOF", "Copies this system partition to the SD card. For advanced users.",
+         "Copia esta partición del sistema a la SD. Para usuarios avanzados."},
+        {BIS_SAFE, 2, "SAFE partition", "Partición SAFE", "Copies this system partition to the SD card. For advanced users.",
+         "Copia esta partición del sistema a la SD. Para usuarios avanzados."},
+        {BIS_SYSTEM, 2, "SYSTEM partition", "Partición SYSTEM", "Copies this system partition to the SD card. For advanced users.",
+         "Copia esta partición del sistema a la SD. Para usuarios avanzados."},
+        {BIS_USER, 2, "USER partition", "Partición USER", "Copies this system partition to the SD card. For advanced users.",
+         "Copia esta partición del sistema a la SD. Para usuarios avanzados."},
+    };
+    constexpr int TOTAL_EXTRAS = sizeof(ORDEN) / sizeof(ORDEN[0]);
 } // namespace
 
 // Definition at bottom.
@@ -55,9 +86,10 @@ void ExtrasMenuState::update()
     m_extrasMenu->update(hasFocus);
     m_controlGuide->update(hasFocus);
 
-    if (aPressed)
+    const int fila = m_extrasMenu->get_selected();
+    if (aPressed && fila >= 0 && fila < TOTAL_EXTRAS)
     {
-        switch (m_extrasMenu->get_selected())
+        switch (ORDEN[fila].accion)
         {
             case REINIT_DATA:       ExtrasMenuState::reinitialize_data(); break;
             case SD_TO_SD_BROWSER:  ExtrasMenuState::sd_to_sd_browser(); break;
@@ -78,9 +110,24 @@ void ExtrasMenuState::render()
 {
     const bool hasFocus = BaseState::has_focus();
 
-    m_renderTarget->clear(colors::TRANSPARENT);
-    m_extrasMenu->render(m_renderTarget, hasFocus);
-    m_renderTarget->render(sdl::Texture::Null, 201, 91);
+    std::vector<ui::lista::Fila> filas{};
+    for (const Extra &e : ORDEN)
+    {
+        ui::lista::Fila f{};
+        f.seccion     = e.seccion == 0   ? strings::tr("CLOUD AND DATA", "NUBE Y DATOS")
+                        : e.seccion == 1 ? strings::tr("TOOLS", "HERRAMIENTAS")
+                                         : strings::tr("COPY PARTITIONS (ADVANCED)", "COPIAR PARTICIONES (AVANZADO)");
+        f.titulo      = strings::tr(e.en, e.es);
+        f.descripcion = strings::tr(e.descEn, e.descEs);
+        if (e.accion == CLOUD_SETUP)
+        {
+            const bool conNube = remote::get_remote_storage() != nullptr;
+            f.valor            = conNube ? strings::tr("Connected", "Conectada") : strings::tr("Not set up", "Sin configurar");
+            f.valorActivo      = conNube;
+        }
+        filas.push_back(std::move(f));
+    }
+    ui::lista::dibujar(filas, m_extrasMenu->get_selected(), m_desplazamiento, hasFocus);
     m_controlGuide->render(sdl::Texture::Null, hasFocus);
 }
 
@@ -90,13 +137,8 @@ void ExtrasMenuState::initialize_menu()
 {
     if (!m_extrasMenu) { m_extrasMenu = ui::Menu::create(32, 10, 1000, 23, 555); }
 
-    for (int i = 0; const char *option = strings::get_by_name(strings::names::EXTRASMENU_MENU, i); i++)
-    {
-        m_extrasMenu->add_option(option);
-    }
-
-    // Appended after the localized options; this is our added in-app cloud setup entry (index CLOUD_SETUP).
-    m_extrasMenu->add_option("Configurar nube");
+    // Rediseno: el menu solo maneja la seleccion; los textos los dibuja ui::lista en el orden de ORDEN.
+    for (const Extra &e : ORDEN) { m_extrasMenu->add_option(strings::tr(e.en, e.es)); }
 }
 
 void ExtrasMenuState::reinitialize_data() { data::launch_initialization(true, finish_reinitialization); }

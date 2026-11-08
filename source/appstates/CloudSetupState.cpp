@@ -16,9 +16,11 @@
 #include "json.hpp"
 #include "remote/remote.hpp"
 #include "strings/strings.hpp"
+#include "ui/ListaSecciones.hpp"
 #include "ui/PopMessageManager.hpp"
 
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -40,6 +42,42 @@ namespace
         SMART_SYNC_TOGGLE,
         RETENTION
     };
+
+    // Rediseno: orden en pantalla, por secciones, con titulo corto y para que sirve cada opcion.
+    struct OpcionNube
+    {
+        int accion;
+        int seccion;
+        const char *en, *es, *descEn, *descEs;
+    };
+    constexpr OpcionNube ORDEN[] = {
+        {WEBDAV_KOOFR, 0, "Koofr (recommended)", "Koofr (recomendado)",
+         "Free 10 GB. Create an app password on koofr.net (Preferences > Password) and enter it here.",
+         "10 GB gratis. Crea una contraseña de aplicación en koofr.net (Preferencias › Contraseña) y escríbela aquí."},
+        {WEBDAV_NEXTCLOUD, 0, "Nextcloud", "Nextcloud", "Your own Nextcloud server. You'll need its address, your user and an app password.",
+         "Tu propio servidor Nextcloud. Necesitas su dirección, tu usuario y una contraseña de aplicación."},
+        {WEBDAV_GENERIC, 0, "Another WebDAV server", "Otro servidor WebDAV", "Any service with WebDAV: you fill in the address, folder, user and password.",
+         "Cualquier servicio con WebDAV: llenas la dirección, la carpeta, el usuario y la contraseña."},
+        {GOOGLE_DRIVE_GUIDE, 0, "Google Drive", "Google Drive", "Step-by-step guide: Google Drive needs a credentials file you create on the PC.",
+         "Guía paso a paso: Google Drive necesita un archivo de credenciales que se crea en la computadora."},
+        {VIEW_CONFIG, 1, "See or edit the connection", "Ver o editar la conexión", "Shows the address and folder in use, and lets you change them.",
+         "Muestra la dirección y la carpeta que se usan, y deja cambiarlas."},
+        {DASHBOARD, 2, "Status of your favorites", "Estado de tus favoritos", "For each favorite game: whether the newest backup is on the console or in the cloud.",
+         "Por cada juego favorito: si el respaldo más nuevo está en la consola o en la nube."},
+        {UPLOAD_FAVORITES, 2, "Upload favorites", "Subir favoritos", "Backs up every favorite game and uploads it to the cloud.",
+         "Respalda cada juego favorito y lo sube a la nube."},
+        {DOWNLOAD_FAVORITES, 2, "Download favorites", "Bajar favoritos", "Brings the newest cloud backup of each favorite. Your current save is backed up first.",
+         "Trae el respaldo más nuevo de la nube de cada favorito. Antes se respalda tu partida actual."},
+        {RESTORE_ALL, 3, "Restore everything from the cloud", "Restaurar todo desde la nube",
+         "For a new or formatted console: restores the newest backup of every installed game, creating its save if needed.",
+         "Para una consola nueva o formateada: restaura el respaldo más nuevo de cada juego instalado y crea su partida si hace falta."},
+        {SMART_SYNC_TOGGLE, 3, "Protect the newer save", "Proteger la partida más nueva",
+         "Before replacing a save with one from the cloud, checks which was played last and keeps the newer one.",
+         "Antes de reemplazar una partida con la de la nube, revisa cuál se jugó al último y conserva la más nueva."},
+        {RETENTION, 3, "Clean up old backups", "Limpiar respaldos viejos", "Keeps only the newest backups of each game and deletes the rest. Press A to change how many.",
+         "Conserva solo los respaldos más nuevos de cada juego y borra el resto. Pulsa A para cambiar cuántos."},
+    };
+    constexpr int TOTAL_NUBE = sizeof(ORDEN) / sizeof(ORDEN[0]);
 } // namespace
 
 //                      ---- Construction ----
@@ -62,9 +100,10 @@ void CloudSetupState::update()
     m_menu->update(hasFocus);
     m_controlGuide->update(hasFocus);
 
-    if (aPressed)
+    const int fila = m_menu->get_selected();
+    if (aPressed && fila >= 0 && fila < TOTAL_NUBE)
     {
-        switch (m_menu->get_selected())
+        switch (ORDEN[fila].accion)
         {
             case WEBDAV_KOOFR:       CloudSetupState::configure_koofr(); break;
             case WEBDAV_NEXTCLOUD:   CloudSetupState::configure_nextcloud(); break;
@@ -88,14 +127,44 @@ void CloudSetupState::render()
 {
     const bool hasFocus = BaseState::has_focus();
 
-    m_renderTarget->clear(colors::TRANSPARENT);
-    m_menu->render(m_renderTarget, hasFocus);
+    // Rediseno: misma estructura que Ajustes, con el estado de la conexion arriba a la derecha.
+    const bool conectada = remote::get_remote_storage() != nullptr;
+    ui::lista::marco(strings::tr("Cloud", "Nube"), conectada ? strings::tr("Connected", "Conectada") : strings::tr("Not set up", "Sin configurar"), conectada);
 
-    // This is a pushed overlay on top of the Extras/main menu, which keeps rendering behind us. Paint an opaque
-    // full-screen background first so those menus don't bleed through and overlap our text.
-    sdl::render_rect_fill(sdl::Texture::Null, 0, 0, graphics::SCREEN_WIDTH, graphics::SCREEN_HEIGHT, colors::CLEAR_COLOR);
-
-    m_renderTarget->render(sdl::Texture::Null, 201, 91);
+    std::vector<ui::lista::Fila> filas{};
+    for (const OpcionNube &o : ORDEN)
+    {
+        ui::lista::Fila f{};
+        f.seccion     = o.seccion == 0   ? strings::tr("CONNECT", "CONECTAR")
+                        : o.seccion == 1 ? strings::tr("YOUR CONNECTION", "TU CONEXIÓN")
+                        : o.seccion == 2 ? strings::tr("FAVORITES", "FAVORITOS")
+                                         : strings::tr("ADVANCED", "AVANZADO");
+        f.titulo      = strings::tr(o.en, o.es);
+        f.descripcion = strings::tr(o.descEn, o.descEs);
+        if (o.accion == VIEW_CONFIG)
+        {
+            f.valor       = conectada ? strings::tr("Connected", "Conectada") : strings::tr("Not set up", "Sin configurar");
+            f.valorActivo = conectada;
+        }
+        else if (o.accion == SMART_SYNC_TOGGLE)
+        {
+            const bool on = config::get_by_key(config::keys::SMART_SYNC) != 0;
+            f.valor       = on ? strings::tr("On", "Encendido") : strings::tr("Off", "Apagado");
+            f.valorActivo = on;
+        }
+        else if (o.accion == RETENTION)
+        {
+            const uint8_t keep = config::get_by_key(config::keys::BACKUP_RETENTION);
+            f.valor            = keep == 0 ? std::string{strings::tr("Off", "Apagado")} : strings::tr("Keep ", "Conservar ") + std::to_string(keep);
+            f.valorActivo      = keep != 0;
+        }
+        else if (!conectada && (o.seccion == 2 || o.accion == RESTORE_ALL))
+        {
+            f.valor = strings::tr("Needs a connection", "Requiere conexión");
+        }
+        filas.push_back(std::move(f));
+    }
+    ui::lista::dibujar(filas, m_menu->get_selected(), m_desplazamiento, hasFocus);
     m_controlGuide->render(sdl::Texture::Null, hasFocus);
 }
 
@@ -105,17 +174,8 @@ void CloudSetupState::initialize_menu()
 {
     if (!m_menu) { m_menu = ui::Menu::create(32, 10, 1000, 23, 555); }
 
-    m_menu->add_option("WebDAV: Koofr");
-    m_menu->add_option("WebDAV: Nextcloud");
-    m_menu->add_option(strings::tr("WebDAV: Other (generic)", "WebDAV: Otro (generico)"));
-    m_menu->add_option(strings::tr("Google Drive (guide)", "Google Drive (guia)"));
-    m_menu->add_option(strings::tr("View / edit current config", "Ver / editar configuracion actual"));
-    m_menu->add_option(strings::tr("Sync dashboard (favorites)", "Panel de sincronizacion (favoritos)"));
-    m_menu->add_option(strings::tr("Upload favorites to cloud", "Subir favoritos a la nube"));
-    m_menu->add_option(strings::tr("Download favorites from cloud", "Bajar favoritos de la nube"));
-    m_menu->add_option(strings::tr("Restore ALL from cloud (creates saves)", "Restaurar TODO de la nube (crea saves)"));
-    m_menu->add_option(""); // Smart-sync row; filled by update_smart_label().
-    m_menu->add_option(""); // Retention row; filled by update_retention_label().
+    // Rediseno: el menu solo maneja la seleccion, en el orden de ORDEN; los textos los dibuja ui::lista.
+    for (const OpcionNube &o : ORDEN) { m_menu->add_option(strings::tr(o.en, o.es)); }
     CloudSetupState::update_smart_label();
     CloudSetupState::update_retention_label();
 }
@@ -130,10 +190,7 @@ void CloudSetupState::cycle_smart_sync()
 
 void CloudSetupState::update_smart_label()
 {
-    const bool on = config::get_by_key(config::keys::SMART_SYNC) != 0;
-    m_menu->edit_option(SMART_SYNC_TOGGLE,
-                        on ? strings::tr("Smart-sync (protect the newer save): ON", "Smart-sync (protege el save mas nuevo): ON")
-                           : strings::tr("Smart-sync (protect the newer save): OFF", "Smart-sync (protege el save mas nuevo): OFF"));
+    // Rediseno: el valor lo dibuja ui::lista en render().
 }
 
 void CloudSetupState::upload_favorites()
@@ -196,10 +253,7 @@ void CloudSetupState::cycle_retention()
 
 void CloudSetupState::update_retention_label()
 {
-    const uint8_t keep      = config::get_by_key(config::keys::BACKUP_RETENTION);
-    const std::string label = keep == 0 ? std::string(strings::tr("Auto-cleanup of backups: Off", "Auto-limpieza de copias: Off"))
-                                        : strings::tr("Auto-cleanup of backups: keep ", "Auto-limpieza de copias: mantener ") + std::to_string(keep);
-    m_menu->edit_option(RETENTION, label);
+    // Rediseno: el valor lo dibuja ui::lista en render().
 }
 
 void CloudSetupState::configure_koofr()

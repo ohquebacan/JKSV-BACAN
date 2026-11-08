@@ -53,6 +53,9 @@ namespace fs
             /// @brief Returns the uncompressed size of the the currently open file.
             uint64_t get_uncompressed_size() const noexcept;
 
+            /// @brief CRC32 que el zip guarda para la entrada actual.
+            uint32_t get_crc() const noexcept;
+
         private:
             /// @brief Underlying unzFile.
             unzFile m_unz{};

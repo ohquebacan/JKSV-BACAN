@@ -1,0 +1,113 @@
+diff --git a/SDL/include/SystemFont.hpp b/SDL/include/SystemFont.hpp
+index cec57a4..d97b98b 100644
+--- a/SDL/include/SystemFont.hpp
++++ b/SDL/include/SystemFont.hpp
+@@ -2,6 +2,7 @@
+ #include "GlyphData.hpp"
+ 
+ #include <array>
++#include <vector>
+ #include <map>
+ #include <optional>
+ #include <switch.h>
+@@ -32,6 +33,10 @@ namespace sdl::text
+             /// @brief Exits the PL service and freetype.
+             static void exit();
+ 
++            /// @brief JKSV BACAN: carga una fuente desde un archivo (por ejemplo del romfs) y la consulta antes
++            /// que las del sistema; lo que no tenga (simbolos de botones, CJK) sale de las del sistema.
++            static bool add_font_file(const char *path);
++
+             /// @brief Resizes the font in freetype.
+             static void resize(int size) noexcept;
+ 
+@@ -46,6 +51,10 @@ namespace sdl::text
+             /// @brief Faces of the system font.
+             static inline std::array<FT_Face, PlSharedFontType_Total> m_faces{};
+ 
++            /// @brief JKSV BACAN: fuente propia (se consulta primero) y sus bytes, que FreeType necesita vivos.
++            static inline FT_Face m_custom{};
++            static inline std::vector<FT_Byte> m_customData{};
++
+             /// @brief This is the font size. 12 is the default.
+             static inline int m_fontSize = 12;
+ 
+diff --git a/SDL/source/SystemFont.cpp b/SDL/source/SystemFont.cpp
+index 26a4213..db2e122 100644
+--- a/SDL/source/SystemFont.cpp
++++ b/SDL/source/SystemFont.cpp
+@@ -3,6 +3,7 @@
+ #include "error.hpp"
+ #include "sdl.hpp"
+ 
++#include <cstdio>
+ #include <span>
+ 
+ //                      ---- Public functions ----
+@@ -49,6 +50,36 @@ bool sdl::text::SystemFont::initialize()
+     return true;
+ }
+ 
++bool sdl::text::SystemFont::add_font_file(const char *path)
++{
++    SystemFont &instance = SystemFont::get_instance();
++    FILE *file           = std::fopen(path, "rb");
++    if (!file) { return false; }
++    std::fseek(file, 0, SEEK_END);
++    const long size = std::ftell(file);
++    std::fseek(file, 0, SEEK_SET);
++    if (size <= 0)
++    {
++        std::fclose(file);
++        return false;
++    }
++    instance.m_customData.resize(static_cast<size_t>(size));
++    const bool read = std::fread(instance.m_customData.data(), 1, instance.m_customData.size(), file) == instance.m_customData.size();
++    std::fclose(file);
++    if (!read) { return false; }
++
++    const bool faceError = sdl::error::freetype(
++        FT_New_Memory_Face(instance.m_ftLib, instance.m_customData.data(), static_cast<FT_Long>(instance.m_customData.size()), 0, &instance.m_custom));
++    if (faceError)
++    {
++        instance.m_custom = nullptr;
++        return false;
++    }
++    FT_Set_Pixel_Sizes(instance.m_custom, 0, instance.m_fontSize);
++    instance.m_glyphCache.clear();
++    return true;
++}
++
+ void sdl::text::SystemFont::exit()
+ {
+     SystemFont &instance = SystemFont::get_instance();
+@@ -64,6 +95,7 @@ void sdl::text::SystemFont::exit()
+     }
+ 
+     // Free the library.
++    if (instance.m_custom) { FT_Done_Face(instance.m_custom); }
+     FT_Done_FreeType(ftLib);
+ 
+     // Exit the service.
+@@ -80,6 +112,7 @@ void sdl::text::SystemFont::resize(int size) noexcept
+ 
+     fontSize = size;
+     for (FT_Face face : faces) { FT_Set_Pixel_Sizes(face, 0, fontSize); }
++    if (instance.m_custom) { FT_Set_Pixel_Sizes(instance.m_custom, 0, fontSize); }
+ }
+ 
+ sdl::text::OptionalGlyph sdl::text::SystemFont::find_load_glyph(uint32_t codepoint)
+@@ -120,6 +153,13 @@ sdl::text::SystemFont &sdl::text::SystemFont::get_instance()
+ 
+ FT_GlyphSlot sdl::text::SystemFont::load_glyph(uint32_t codepoint)
+ {
++    // JKSV BACAN: primero la fuente propia; si no tiene el caracter, las del sistema.
++    if (m_custom)
++    {
++        const FT_UInt index = FT_Get_Char_Index(m_custom, codepoint);
++        if (index != 0 && FT_Load_Glyph(m_custom, index, FT_LOAD_RENDER) == 0) { return m_custom->glyph; }
++    }
++
+     // Loop through all of the faces to find the glyph we need.
+     for (FT_Face face : m_faces)
+     {

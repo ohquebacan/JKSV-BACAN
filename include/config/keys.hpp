@@ -35,4 +35,5 @@ namespace config::keys
     /// @brief Smart sync: when on, a cloud restore skips a game whose local save is genuinely newer (by save
     /// timestamp, not backup date), protecting real progress.
     inline constexpr std::string_view SMART_SYNC              = "SmartSync";
+    inline constexpr std::string_view THEME                   = "Tema";
 }

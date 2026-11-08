@@ -240,14 +240,20 @@ class ConfirmState final : public BaseState
                              colors::DIV_COLOR);
             sdl::render_line(sdl::Texture::Null, LINE_B_X, y + LINE_Y_OFFSET, LINE_B_X, y + LINE_B_Y_B, colors::DIV_COLOR);
 
-            // Yes
-            sdl::text::render(sdl::Texture::Null,
-                              m_yesX,
-                              y + OPTION_Y_OFFSET,
-                              OPTION_FONT_SIZE,
-                              sdl::text::NO_WRAP,
-                              colors::WHITE,
-                              sm_yes);
+            // Yes. Al mantener A el texto cambia a uno largo ("Sigue manteniendo presionado"): se achica hasta
+            // caber en su mitad del cuadro (360 px) y se centra con ese tamano, para que no se salga.
+            {
+                int yesSize = OPTION_FONT_SIZE;
+                while (yesSize > 14 && sdl::text::get_width(yesSize, sm_yes) > 330) { --yesSize; }
+                const int yesX = COORD_YES_X - (sdl::text::get_width(yesSize, sm_yes) / 2);
+                sdl::text::render(sdl::Texture::Null,
+                                  yesX,
+                                  y + OPTION_Y_OFFSET + (OPTION_FONT_SIZE - yesSize) / 2,
+                                  yesSize,
+                                  sdl::text::NO_WRAP,
+                                  colors::WHITE,
+                                  sm_yes);
+            }
 
             // No
             sdl::text::render(sdl::Texture::Null,

@@ -17,29 +17,13 @@ ui::Frame::Frame(int x, int y, int width, int height)
 
 void ui::Frame::render(sdl::SharedTexture &target, bool hasFocus)
 {
-    // This is the size of one of the "tiles" of the frame.
-    static constexpr int TILE = 16;
-
-    const int midWidth      = m_width - (TILE * 2);
-    const int midHeight     = m_height - (TILE * 2);
-    const int rightEdge     = (m_x + m_width) - TILE;
-    const int bottomEdge    = (m_y + m_height) - TILE;
-    const int textureCorner = TILE * 2;
-
-    // Top.
-    sm_frameCorners->render_part(target, m_x, m_y, 0, 0, TILE, TILE);
-    sm_frameCorners->render_part_stretched(target, TILE, 0, TILE, TILE, m_x + TILE, m_y, midWidth, TILE);
-    sm_frameCorners->render_part(target, rightEdge, m_y, 32, 0, TILE, TILE);
-
-    // Middle
-    sm_frameCorners->render_part_stretched(target, 0, TILE, TILE, TILE, m_x, m_y + TILE, TILE, midHeight);
-    sdl::render_rect_fill(target, m_x + TILE, m_y + TILE, midWidth, midHeight, colors::SLIDE_PANEL_CLEAR);
-    sm_frameCorners->render_part_stretched(target, textureCorner, TILE, TILE, TILE, rightEdge, m_y + TILE, TILE, midHeight);
-
-    // Bottom
-    sm_frameCorners->render_part(target, m_x, bottomEdge, 0, textureCorner, TILE, TILE);
-    sm_frameCorners->render_part_stretched(target, TILE, textureCorner, TILE, TILE, m_x + TILE, bottomEdge, midWidth, TILE);
-    sm_frameCorners->render_part(target, rightEdge, bottomEdge, textureCorner, textureCorner, TILE, TILE);
+    // Rediseno: panel del tema con un borde fino, en lugar del marco de imagen con bordes blancos.
+    if (m_width <= 0 || m_height <= 0) { return; }
+    sdl::render_rect_fill(target, m_x, m_y, m_width, m_height, colors::PANEL_SOLID);
+    sdl::render_line(target, m_x, m_y, m_x + m_width - 1, m_y, colors::DIV_COLOR);
+    sdl::render_line(target, m_x, m_y + m_height - 1, m_x + m_width - 1, m_y + m_height - 1, colors::DIV_COLOR);
+    sdl::render_line(target, m_x, m_y, m_x, m_y + m_height - 1, colors::DIV_COLOR);
+    sdl::render_line(target, m_x + m_width - 1, m_y, m_x + m_width - 1, m_y + m_height - 1, colors::DIV_COLOR);
 }
 
 void ui::Frame::set_x(int x) noexcept { m_x = x; }
