@@ -30,5 +30,9 @@ namespace ui::lista
     void pildora(sdl::SharedTexture &target, int x, int y, int w, int h, sdl::Color color);
 
     /// @brief Dibuja la lista en x=176..816 y el panel en x=852..1244, entre y=97 y 648.
-    void dibujar(const std::vector<Fila> &filas, int elegida, double &desplazamiento, bool hasFocus);
+    /// @param reservaPanel Alto que se deja libre arriba del panel de la derecha (la Nube dibuja ahi su estado).
+    void dibujar(const std::vector<Fila> &filas, int elegida, double &desplazamiento, bool hasFocus, int reservaPanel = 0);
+
+    /// @brief Donde empieza el panel de la derecha (x, y, ancho), para dibujar en la reserva.
+    inline constexpr int PANEL_X = 852, PANEL_Y = 104, PANEL_ANCHO = 392;
 }

@@ -2,8 +2,10 @@
 #include "fslib.hpp"
 #include "json.hpp"
 #include "ui/ListaSecciones.hpp"
+#include "appstates/CloudHubState.hpp"
 #include "appstates/CloudSetupState.hpp"
 #include "partidas.hpp"
+#include "nube.hpp"
 
 #include "StateManager.hpp"
 #include "appstates/ConfirmState.hpp"
@@ -197,14 +199,29 @@ void MainMenuState::render()
                 fy += 4;
                 sdl::render_line(sdl::Texture::Null, CX + 34, fy, COL - 52, fy, colors::DIV_COLOR);
                 fy += 16;
-                auto onOff = [](bool on) { return std::string{on ? strings::tr("On", "Encendido") : strings::tr("Off", "Apagado")}; };
-                const bool subir    = config::get_by_key(config::keys::AUTO_UPLOAD) != 0;
-                const bool proteger = config::get_by_key(config::keys::SMART_SYNC) != 0;
-                const uint8_t keep  = config::get_by_key(config::keys::BACKUP_RETENTION);
-                fila(strings::tr("Upload on backup", "Subir al respaldar"), onOff(subir), subir ? colors::BLUE_GREEN : colors::DIALOG_LIGHT);
-                fila(strings::tr("Protect newer save", "Proteger la más nueva"), onOff(proteger), proteger ? colors::BLUE_GREEN : colors::DIALOG_LIGHT);
-                fila(strings::tr("Clean up old backups", "Limpiar respaldos viejos"),
-                     keep == 0 ? onOff(false) : strings::tr("Keep ", "Conservar ") + std::to_string(keep), keep ? colors::BLUE_GREEN : colors::DIALOG_LIGHT);
+                // Lo de la seccion Nube: que falta sincronizar y cuanto hay alla (de la ultima consulta, sin red aqui).
+                const nube::Resumen r = nube::resumen();
+                if (r.listo && r.ok)
+                {
+                    const int pendientes = r.subir + r.bajar + r.conflictos;
+                    fila(strings::tr("Favorites", "Favoritos"),
+                         pendientes == 0 ? std::string{strings::tr("All up to date", "Todos al día")}
+                                         : std::to_string(r.subir) + strings::tr(" to upload · ", " por subir · ") + std::to_string(r.bajar + r.conflictos) +
+                                               strings::tr(" to download", " por bajar"),
+                         pendientes == 0 ? colors::WHITE : colors::BLUE_GREEN);
+                    fila(strings::tr("In the cloud", "En la nube"),
+                         nube::tamano_legible(r.bytes) + strings::tr(" in ", " en ") + std::to_string(r.juegos) + strings::tr(" games", " juegos"), colors::WHITE);
+                }
+                else
+                {
+                    fila(strings::tr("Favorites", "Favoritos"),
+                         nube::consultando() ? std::string{strings::tr("Checking…", "Consultando…")}
+                                             : std::string{strings::tr("Open to see what's pending", "Entra para ver qué falta")},
+                         colors::DIALOG_LIGHT);
+                }
+                const bool alSalir = config::get_by_key(config::keys::SUBIR_AL_SALIR) != 0;
+                fila(strings::tr("Upload on exit", "Subir al salir"), alSalir ? strings::tr("On", "Encendido") : strings::tr("Off", "Apagado"),
+                     alSalir ? colors::BLUE_GREEN : colors::DIALOG_LIGHT);
             }
             else
             {
@@ -275,7 +292,7 @@ void MainMenuState::render()
                                                                         f.fecha.substr(11, 2) + ":" + f.fecha.substr(14, 2);
                         const int fw = sdl::text::get_width(16, fecha);
                         sdl::text::render(sdl::Texture::Null, COL_FIN - fw, gy + 1, 16, sdl::text::NO_WRAP,
-                                          f.fecha.empty() ? colors::DIV_COLOR : colors::DIALOG_LIGHT, fecha);
+                                          colors::DIALOG_LIGHT, fecha);
                         const std::vector<std::string> n = ui::lista::partir(f.nombre, 17, COL_FIN - COL - fw - 20, 1);
                         if (!n.empty()) { sdl::text::render(sdl::Texture::Null, COL, gy, 17, sdl::text::NO_WRAP, colors::WHITE, n[0]); }
                         gy += 31;
@@ -290,8 +307,8 @@ void MainMenuState::render()
 
             sdl::text::render(sdl::Texture::Null, CX + 34, CY + 420 - 44, 18, sdl::text::NO_WRAP, colors::BLUE_GREEN,
                               m_nubeServicio.empty() ? strings::tr("\uE0E0 Open to connect", "\uE0E0 Abrir para conectar")
-                                                     : strings::tr("\uE0E0 Open: sync favorites or change these settings",
-                                                                   "\uE0E0 Abrir: sincronizar favoritos o cambiar estos ajustes"));
+                                                     : strings::tr("\uE0E0 Open: sync, games in the cloud, test connection",
+                                                                   "\uE0E0 Abrir: sincronizar, juegos en la nube, probar conexión"));
         }
         else
         {
@@ -340,7 +357,7 @@ void MainMenuState::initialize_settings_extras()
     {
         sm_settingsState = SettingsState::create();
         sm_extrasState   = ExtrasMenuState::create();
-        sm_cloudState    = CloudSetupState::create();
+        sm_cloudState    = CloudHubState::create(); // la seccion Nube; Extras sigue abriendo Configurar nube
     }
 }
 

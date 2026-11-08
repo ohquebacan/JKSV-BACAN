@@ -11,6 +11,8 @@
 #include "error.hpp"
 #include "fs/fs.hpp"
 #include "logging/logger.hpp"
+#include "JKSV.hpp"
+#include "nube.hpp"
 #include "remote/remote.hpp"
 #include "strings/strings.hpp"
 #include "stringutil.hpp"
@@ -884,6 +886,179 @@ void tasks::backup::download_favorites_remote(sys::threadpool::JobData taskData)
     ui::PopMessageManager::push_message(POP_TICKS, report);
 
     task->complete();
+}
+
+void tasks::backup::sync_favorites_remote(sys::threadpool::JobData taskData)
+{
+    static constexpr const char *DOWNLOAD_PATH = "sdmc:/jksv_download.zip";
+
+    auto datos              = std::static_pointer_cast<nube::DatosSync>(taskData);
+    sys::ProgressTask *task = static_cast<sys::ProgressTask *>(datos->task);
+    if (error::is_null(task)) { return; }
+
+    auto terminar = [&]() {
+        nube::invalidar();
+        task->complete();
+        if (datos->salirAlTerminar) { JKSV::request_quit(); }
+    };
+
+    remote::Storage *remote = remote::get_remote_storage();
+    if (!remote)
+    {
+        ui::PopMessageManager::push_message(POP_TICKS, strings::tr("Couldn't reach your cloud: nothing was synced.",
+                                                                   "No se pudo llegar a tu nube: no se sincronizó nada."));
+        terminar();
+        return;
+    }
+
+    task->set_status(strings::tr("Checking the cloud…", "Consultando la nube…"));
+    if (!remote->reload())
+    {
+        ui::PopMessageManager::push_message(POP_TICKS, strings::tr("The cloud didn't answer: nothing was synced. Most likely the connection is slow; try again.",
+                                                                   "La nube no respondió: no se sincronizó nada. Lo más probable es que la conexión esté lenta; vuelve a intentarlo."));
+        terminar();
+        return;
+    }
+
+    int subidos = 0, bajados = 0, alDia = 0, fallos = 0;
+
+    auto data           = std::make_shared<BackupMenuState::DataStruct>();
+    data->task          = task;
+    data->killTask      = false;
+    data->spawningState = nullptr;
+
+    // Respaldo nuevo de la partida actual, subido a la carpeta del juego.
+    auto subir = [&](data::User *user, const FsSaveDataInfo *saveInfo, data::TitleInfo *titleInfo) -> bool {
+        {
+            fs::ScopedSaveMount montaje{fs::DEFAULT_SAVE_MOUNT, saveInfo};
+            if (!montaje.is_open() || !fs::directory_has_contents(fs::DEFAULT_SAVE_ROOT)) { return false; }
+        }
+        const std::string carpeta = nube::carpeta_de(remote, titleInfo);
+        remote->return_to_root();
+        if (!remote->directory_exists(carpeta) && !remote->create_directory(carpeta)) { return false; }
+        remote->change_directory(remote->get_directory_by_name(carpeta));
+
+        const std::string fecha = stringutil::get_date_string();
+        data->user              = user;
+        data->saveInfo          = saveInfo;
+        data->titleInfo         = titleInfo;
+        data->remoteName        = stringutil::get_formatted_string("%s - %s.zip", user->get_path_safe_nickname(), fecha.c_str());
+        tasks::backup::create_new_backup_remote(data);
+
+        const bool subio = remote->file_exists(data->remoteName);
+        remote->return_to_root();
+        if (subio) { nube::registrar(user, saveInfo->application_id, data->remoteName, nube::marca_partida(saveInfo)); }
+        return subio;
+    };
+
+    data::UserList &usuarios = datos->usuarios;
+    for (data::User *user : usuarios)
+    {
+        if (user->get_account_save_type() == FsSaveDataType_System) { continue; }
+        const int64_t total = user->get_total_data_entries();
+        for (int64_t i = 0; i < total; i++)
+        {
+            const FsSaveDataInfo *saveInfo = user->get_save_info_at(i);
+            if (error::is_null(saveInfo) || !config::is_favorite(saveInfo->application_id)) { continue; }
+            data::TitleInfo *titleInfo = data::get_title_info_by_id(saveInfo->application_id);
+            if (error::is_null(titleInfo)) { continue; }
+
+            task->set_status(std::string{titleInfo->get_title()});
+            const nube::Accion accion = nube::decidir(remote, user, saveInfo, titleInfo);
+
+            if (accion == nube::Accion::AlDia) { ++alDia; continue; }
+            if (accion == nube::Accion::Subir)
+            {
+                subir(user, saveInfo, titleInfo) ? ++subidos : ++fallos;
+                continue;
+            }
+            if (datos->soloSubir) { continue; } // al salir no se baja nada
+
+            // Bajar o conflicto: se trae el respaldo y se compara la marca de tiempo guardada en el con la de aqui.
+            remote::Item *nuevo = nube::mas_nuevo(remote, nube::carpeta_de(remote, titleInfo));
+            if (!nuevo) { ++fallos; continue; }
+            const std::string nombreNube{nuevo->get_name()};
+
+            const fslib::Path temporal{DOWNLOAD_PATH};
+            if (!remote->download_file(nuevo, temporal, task))
+            {
+                ++fallos;
+                continue;
+            }
+            fs::MiniUnzip respaldo{temporal};
+            if (!respaldo.is_open())
+            {
+                fslib::delete_file(temporal);
+                ++fallos;
+                continue;
+            }
+
+            uint64_t marcaNube = 0;
+            if (respaldo.locate_file(fs::NAME_SAVE_META))
+            {
+                fs::SaveMetaData meta{};
+                respaldo.read(&meta, fs::SIZE_SAVE_META);
+                marcaNube = meta.timestamp;
+            }
+            const uint64_t marcaAqui = nube::marca_partida(saveInfo);
+
+            if (marcaNube != 0 && marcaNube == marcaAqui)
+            {
+                // Es la misma partida (p. ej. la subio esta consola antes de existir el registro).
+                respaldo.close();
+                fslib::delete_file(temporal);
+                nube::registrar(user, saveInfo->application_id, nombreNube, marcaAqui);
+                ++alDia;
+                continue;
+            }
+            if (marcaNube != 0 && marcaAqui > marcaNube)
+            {
+                // La de aqui es mas nueva: se sube en vez de bajar.
+                respaldo.close();
+                fslib::delete_file(temporal);
+                subir(user, saveInfo, titleInfo) ? ++subidos : ++fallos;
+                continue;
+            }
+
+            // La de la nube es mas nueva (o no dice su fecha): PRE-SYNC de la actual y se reemplaza.
+            data->user      = user;
+            data->titleInfo = titleInfo;
+            data->saveInfo  = saveInfo;
+            {
+                const fslib::Path carpetaLocal{config::get_working_directory() / titleInfo->get_path_safe_title()};
+                if (!fslib::directory_exists(carpetaLocal)) { error::fslib(fslib::create_directories_recursively(carpetaLocal)); }
+                const std::string fecha = stringutil::get_date_string();
+                data->path              = carpetaLocal / stringutil::get_formatted_string("PRE-SYNC - %s.zip", fecha.c_str());
+                tasks::backup::create_new_backup_local(data);
+            }
+            {
+                auto montaje = create_scoped_mount(saveInfo);
+                error::fslib(fslib::delete_directory_recursively(fs::DEFAULT_SAVE_ROOT));
+                error::fslib(fslib::commit_data_to_file_system(fs::DEFAULT_SAVE_MOUNT));
+            }
+            read_and_process_meta(respaldo, data, task);
+            {
+                FsSaveDataExtraData extra{};
+                const bool leido          = fs::read_save_extra_data(saveInfo, extra);
+                const int64_t journalSize = leido ? extra.journal_size : titleInfo->get_journal_size(user->get_account_save_type());
+                auto montaje              = create_scoped_mount(saveInfo);
+                fs::copy_zip_to_directory(respaldo, fs::DEFAULT_SAVE_ROOT, journalSize, task);
+            }
+            respaldo.close();
+            fslib::delete_file(temporal);
+            nube::registrar(user, saveInfo->application_id, nombreNube, nube::marca_partida(saveInfo));
+            ++bajados;
+        }
+    }
+    remote->return_to_root();
+
+    std::string informe = strings::tr("Synced: ", "Sincronizado: ") + std::to_string(subidos) + strings::tr(" up, ", " subidos, ") +
+                          std::to_string(bajados) + strings::tr(" down, ", " bajados, ") + std::to_string(alDia) +
+                          strings::tr(" up to date", " al día");
+    if (fallos > 0) { informe += strings::tr(" · ", " · ") + std::to_string(fallos) + strings::tr(" failed", " fallaron"); }
+    ui::PopMessageManager::push_message(POP_TICKS * 2, informe);
+
+    terminar();
 }
 
 // Shared restore core for the cloud sweep: download the item, optionally protect a newer local save, make a

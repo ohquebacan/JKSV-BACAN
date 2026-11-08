@@ -6,6 +6,9 @@
 #include "appstates/TaskState.hpp"
 #include "builddate.hpp"
 #include "tasks/update.hpp"
+#include "tasks/backup.hpp"
+#include "appstates/ProgressState.hpp"
+#include "nube.hpp"
 #include "config/config.hpp"
 #include "curl/curl.hpp"
 #include "data/data.hpp"
@@ -136,7 +139,22 @@ void JKSV::update()
 
     const bool plusPressed = input::button_pressed(HidNpadButton_Plus);
     const bool isClosable  = StateManager::back_is_closable();
-    if (plusPressed && isClosable) { sm_isRunning = false; }
+    if (plusPressed && isClosable)
+    {
+        // Con «Subir al salir» encendido: primero se suben los favoritos que cambiaron y la tarea cierra JKSV.
+        static bool subiendo = false;
+        const bool subir     = config::get_by_key(config::keys::SUBIR_AL_SALIR) != 0 && remote::get_remote_storage() != nullptr;
+        if (subir && !subiendo)
+        {
+            subiendo                = true;
+            auto datos              = std::make_shared<nube::DatosSync>();
+            datos->soloSubir        = true;
+            datos->salirAlTerminar  = true;
+            data::get_users(datos->usuarios);
+            ProgressState::create_push_fade(tasks::backup::sync_favorites_remote, datos);
+        }
+        else { sm_isRunning = false; }
+    }
 
     StateManager::update();
     ui::PopMessageManager::update();

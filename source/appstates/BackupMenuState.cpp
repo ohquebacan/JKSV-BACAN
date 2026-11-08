@@ -10,6 +10,7 @@
 #include "error.hpp"
 #include "fs/fs.hpp"
 #include "fslib.hpp"
+#include "nube.hpp"
 #include "graphics/colors.hpp"
 #include "input.hpp"
 #include "keyboard/keyboard.hpp"
@@ -526,6 +527,10 @@ void BackupMenuState::initialize_remote_storage()
 {
     remote::Storage *remote = remote::get_remote_storage();
     if (!remote) { return; }
+
+    // Si la seccion Nube esta leyendo la lista en segundo plano, se espera a que termine (unos segundos como
+    // mucho): las dos cosas no pueden cambiar la lista de la nube a la vez.
+    for (int i = 0; i < 300 && nube::consultando(); i++) { svcSleepThread(50'000'000LL); }
 
     // Always resolve the per-title folder relative to the JKSV root. Every other navigation site pairs
     // change_directory() with return_to_root(); doing it here too keeps the parent from leaking in from a

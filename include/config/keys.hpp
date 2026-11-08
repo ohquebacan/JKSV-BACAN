@@ -36,4 +36,6 @@ namespace config::keys
     /// timestamp, not backup date), protecting real progress.
     inline constexpr std::string_view SMART_SYNC              = "SmartSync";
     inline constexpr std::string_view THEME                   = "Tema";
+    /// @brief Al salir con + se suben los favoritos que cambiaron (sincronizar solo hacia arriba).
+    inline constexpr std::string_view SUBIR_AL_SALIR          = "SubirAlSalir";
 }

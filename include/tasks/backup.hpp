@@ -41,4 +41,8 @@ namespace tasks::backup
     /// @brief For every game folder in the cloud, finds the installed title, creates its save container if missing
     /// (no game launch needed), and restores the newest cloud backup. Skips titles that aren't installed.
     void restore_all_from_cloud(sys::threadpool::JobData taskData);
+
+    /// @brief Sincroniza los favoritos con la nube (nube::DatosSync): sube lo que cambio aqui, baja lo que cambio
+    /// alla y, si cambiaron las dos, se queda la mas nueva por fecha (con PRE-SYNC antes de reemplazar).
+    void sync_favorites_remote(sys::threadpool::JobData taskData);
 }

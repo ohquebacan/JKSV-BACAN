@@ -42,7 +42,7 @@ APP_TITLE   :=  JKSV BACÁN
 APP_AUTHOR  :=  JK / OQB
 # Version de JKSV BACAN: el aviso de actualizacion la compara con la etiqueta del ultimo release
 # (vX.Y-bacan) de ohquebacan/JKSV-BACAN. Subirla en cada release nuevo.
-BACAN_VERSION := 3.0
+BACAN_VERSION := 3.1
 APP_VERSION :=  $(BACAN_VERSION) OQB
 ROMFS	    :=	romfs
 ICON		:=	icon.jpg
