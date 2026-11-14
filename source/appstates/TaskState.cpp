@@ -21,6 +21,7 @@ void TaskState::update()
 {
     BaseTask::pop_on_plus();
     BaseTask::update_loading_glyph();
+    BaseTask::follow_light();
     if (!m_task->is_running()) { TaskState::deactivate_state(); }
 }
 

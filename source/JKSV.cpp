@@ -1,3 +1,4 @@
+#include "luz.hpp"
 #include "JKSV.hpp"
 
 #include "StateManager.hpp"
@@ -85,6 +86,9 @@ JKSV::JKSV()
     // Config and input.
     input::initialize();
     config::initialize();
+    // JKSV BACÁN: si otra app OQB se cerró con la luz de los mandos prendida
+    // (cerrarla desde el HOME no le deja apagarla), aquí se apaga al abrir.
+    luz::alSalir();
     // El tema guardado, antes de dibujar nada.
     theme::apply_from_config();
 
@@ -119,6 +123,7 @@ JKSV::JKSV()
 JKSV::~JKSV()
 {
     sys::threadpool::exit();
+    luz::alSalir();
     config::save();
     curl::exit();
     JKSV::exit_services();
@@ -136,6 +141,13 @@ bool JKSV::is_running() const noexcept { return sm_isRunning && appletMainLoop()
 void JKSV::update()
 {
     input::update();
+    {   // JKSV BACÁN: cualquier botón da por visto el aviso de error de la luz.
+        constexpr uint64_t botones = HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Y |
+                                     HidNpadButton_L | HidNpadButton_R | HidNpadButton_ZL | HidNpadButton_ZR |
+                                     HidNpadButton_Plus | HidNpadButton_Minus | HidNpadButton_AnyUp |
+                                     HidNpadButton_AnyDown | HidNpadButton_AnyLeft | HidNpadButton_AnyRight;
+        if (input::button_pressed(static_cast<HidNpadButton>(botones))) { luz::alTocar(); }
+    }
 
     const bool plusPressed = input::button_pressed(HidNpadButton_Plus);
     const bool isClosable  = StateManager::back_is_closable();

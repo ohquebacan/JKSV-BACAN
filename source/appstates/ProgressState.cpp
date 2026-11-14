@@ -54,6 +54,7 @@ void ProgressState::update()
     // These are always updated and aren't conditional.
     BaseTask::update_loading_glyph();
     BaseTask::pop_on_plus();
+    BaseTask::follow_light();
 
     switch (m_state)
     {

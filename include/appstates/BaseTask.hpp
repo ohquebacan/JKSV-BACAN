@@ -23,12 +23,19 @@ class BaseTask : public BaseState
     protected:
         /// @brief Underlying system task. This needs to be allocated by the derived classes.
         std::unique_ptr<sys::Task> m_task{};
+        /// @brief Errores anotados al empezar y si ya se avisó el final a la luz.
+        unsigned m_errorsAtStart{};
+        bool m_lightFinished{};
+        bool m_lightStarted{};
 
         /// @brief Updates the loading glyph animation.
         void update_loading_glyph();
 
         /// @brief Displays the "can't quit JKSV" when plus is pressed.
         void pop_on_plus();
+
+        /// @brief JKSV BACÁN: avisa a la luz cuando la tarea termina (una sola vez).
+        void follow_light();
 
         /// @brief This function renders the loading glyph in the bottom left corner.
         /// @note This is mostly just so users don't think JKSV has frozen when operations take a long time.

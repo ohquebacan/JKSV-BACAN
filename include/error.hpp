@@ -5,6 +5,9 @@
 
 namespace error
 {
+    /// @brief JKSV BACÁN: errores anotados desde que abrió la app (para la luz de los mandos).
+    unsigned count() noexcept;
+
     /// @brief Logs and returns if a call from libnx fails.
     bool libnx(Result code, const std::source_location &location = std::source_location::current()) noexcept;
 

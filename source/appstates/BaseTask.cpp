@@ -1,4 +1,6 @@
 #include "appstates/BaseTask.hpp"
+#include "error.hpp"
+#include "luz.hpp"
 
 #include "graphics/colors.hpp"
 #include "input.hpp"
@@ -15,7 +17,24 @@ namespace
 BaseTask::BaseTask()
     : BaseState(false)
     , m_frameTimer(TICKS_GLYPH_TRIGGER)
-    , m_popUnableExit(strings::get_by_name(strings::names::GENERAL_POPS, 0)) {};
+    , m_popUnableExit(strings::get_by_name(strings::names::GENERAL_POPS, 0))
+{
+    m_errorsAtStart = error::count();
+}
+
+void BaseTask::follow_light()
+{
+    // Solo las tareas que lo llaman (respaldar, restaurar, la nube) encienden la
+    // luz: la carga de partidas al abrir JKSV también es una tarea, pero no avisa.
+    if (!m_lightStarted)
+    {
+        m_lightStarted = true;
+        luz::empezarTarea();
+    }
+    if (m_lightFinished || !m_task || m_task->is_running()) { return; }
+    m_lightFinished = true;
+    luz::terminarTarea(error::count() > m_errorsAtStart);
+}
 
 //                      ---- Public functions ----
 

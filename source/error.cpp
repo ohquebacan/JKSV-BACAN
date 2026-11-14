@@ -3,11 +3,17 @@
 #include "fslib.hpp"
 #include "logging/logger.hpp"
 
+#include <atomic>
 #include <cstdio>
 #include <string_view>
 
 /// @brief Prepares and makes sure the strings match the format I actually want!
 static void prep_locations(std::string_view &file, std::string_view &function, const std::source_location &location) noexcept;
+
+// JKSV BACÁN: cuántos errores se anotaron desde que abrió la app. La luz de los
+// mandos lo compara al empezar y al terminar cada tarea para saber si falló algo.
+static std::atomic<unsigned> s_errorCount{0};
+unsigned error::count() noexcept { return s_errorCount.load(); }
 
 bool error::libnx(Result code, const std::source_location &location) noexcept
 {
@@ -17,6 +23,7 @@ bool error::libnx(Result code, const std::source_location &location) noexcept
     prep_locations(file, function, location);
 
     logger::log("%s::%s::%u::%u:%X", file.data(), function.data(), location.line(), location.column(), code);
+    ++s_errorCount;
     return true;
 }
 
@@ -33,6 +40,7 @@ bool error::fslib(bool result, const std::source_location &location) noexcept
                 location.line(),
                 location.column(),
                 fslib::error::get_string());
+    ++s_errorCount;
 
     return true;
 }
@@ -45,6 +53,7 @@ bool error::is_null(const void *pointer, const std::source_location &location) n
     prep_locations(file, function, location);
 
     logger::log("%s::%s::%u::%u::nullptr!", file.data(), function.data(), location.line(), location.column());
+    ++s_errorCount;
 
     return true;
 }
@@ -66,6 +75,7 @@ bool error::is_null(std::initializer_list<const void *> pointers, const std::sou
                         location.line(),
                         location.column(),
                         index);
+            ++s_errorCount;
 
             return true;
         }
