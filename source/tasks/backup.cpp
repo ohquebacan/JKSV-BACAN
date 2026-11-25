@@ -1,3 +1,4 @@
+#include <set>
 #include "tasks/backup.hpp"
 
 #include "curl/curl.hpp"
@@ -488,6 +489,7 @@ static int partida_a_zip(const std::string &datos, const std::string &raiz, cons
 
     int archivos = 0;
     bool fallo   = false;
+    std::set<std::string> carpetas{};
     bytes        = 0;
     conMeta      = false;
     std::vector<char> bufer(0x10000);
@@ -511,7 +513,21 @@ static int partida_a_zip(const std::string &datos, const std::string &raiz, cons
 
         if (ruta == fs::NAME_SAVE_META) { conMeta = true; }
         else { bytes += archive_entry_size(entrada); }
-        if (!zip.open_new_file(ruta)) { fallo = true; break; }
+
+        /* Cada carpeta con su propia entrada, como en un respaldo normal de JKSV: al restaurar se crean
+           primero y en orden. Sin ellas, crear «save_data/mii» de una vez dejaba la restauracion colgada
+           (create_directories_recursively con una ruta sin '/' al final). */
+        for (size_t barra = ruta.find('/'); barra != ruta.npos; barra = ruta.find('/', barra + 1))
+        {
+            const std::string carpeta = ruta.substr(0, barra + 1);
+            if (!carpetas.insert(carpeta).second) { continue; }
+            if (!zip.open_new_file("/" + carpeta)) { fallo = true; break; }
+            zip.close_current_file();
+        }
+        if (fallo) { break; }
+        // open_new_file corta hasta la primera '/' (espera «save:/ruta»). Sin el '/' de adelante se comia la
+        // primera carpeta: la partida de Smash quedaba fuera de save_data/ y el juego arrancaba limpio.
+        if (!zip.open_new_file("/" + ruta)) { fallo = true; break; }
         la_ssize_t leidos{};
         while ((leidos = archive_read_data(lector, bufer.data(), bufer.size())) > 0)
         {
@@ -561,13 +577,13 @@ void tasks::backup::restore_partida(sys::threadpool::JobData taskData)
         }
     }
 
-    // 2) Pasarla a un zip de JKSV junto a los respaldos del juego: queda en la lista y se puede volver a
-    //    restaurar. Un archivo que no se puede leer (una pagina de error en vez del archivo) o sin nada en su
-    //    carpeta no debe borrar la partida actual.
+    // 2) Pasarla a un zip de JKSV temporal, fuera de la carpeta del juego: se restaura como cualquier
+    //    respaldo y despues se borra. Antes quedaba en la lista en cada intento (la misma partida, una y otra
+    //    vez); se vuelve a bajar cuando haga falta. Un archivo que no se puede leer (una pagina de error en
+    //    vez del archivo) o sin nada en su carpeta no debe borrar la partida actual.
     const fslib::Path &basePath = *castData->basePath;
     if (!fslib::directory_exists(basePath)) { error::fslib(fslib::create_directories_recursively(basePath)); }
-    const std::string fecha   = stringutil::get_date_string();
-    const fslib::Path zipPath = basePath / stringutil::get_formatted_string("PARTIDA OQB - %s.zip", fecha.c_str());
+    const fslib::Path zipPath{"sdmc:/config/JKSV/partida_temporal.zip"};
     int64_t bytes{};
     bool conMeta{};
     logger::log("partida: abriendo el archivo (raiz \"%s\")", castData->raiz.c_str());
@@ -621,6 +637,7 @@ void tasks::backup::restore_partida(sys::threadpool::JobData taskData)
     castData->path     = zipPath;
     castData->killTask = true;
     tasks::backup::restore_backup_local(castData);
+    error::fslib(fslib::delete_file(zipPath));
 }
 
 void tasks::backup::restore_backup_remote(sys::threadpool::JobData taskData)
@@ -1586,8 +1603,13 @@ static bool read_and_process_meta(fs::MiniUnzip &unzip, BackupMenuState::TaskDat
     const bool metaFound = unzip.locate_file(fs::NAME_SAVE_META);
     if (!metaFound)
     {
-        const char *popNotFound = strings::get_by_name(strings::names::BACKUPMENU_POPS, 16);
-        ui::PopMessageManager::push_message(POP_TICKS, popNotFound);
+        /* Las partidas completas descargadas no traen meta (ese archivo lo escribe JKSV en sus propios
+           respaldos) y su tamano ya se ajusto antes; el aviso solo confundia. */
+        if (taskData->url.empty())
+        {
+            const char *popNotFound = strings::get_by_name(strings::names::BACKUPMENU_POPS, 16);
+            ui::PopMessageManager::push_message(POP_TICKS, popNotFound);
+        }
 
         return false;
     }

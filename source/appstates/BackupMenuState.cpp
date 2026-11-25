@@ -43,6 +43,7 @@ namespace
     {
         std::string etiqueta;
         std::string fecha;
+        std::string usuario;  // de quien es (vacio: no se sabe, o una partida bajada)
     };
 
     // Hoy / Ayer / dd/mm/aaaa, con la hora.
@@ -98,11 +99,30 @@ namespace
         std::string_view prefijo     = nombre.substr(0, nombre.size() - LARGO);
         while (!prefijo.empty() && (prefijo.back() == ' ' || prefijo.back() == '-')) { prefijo.remove_suffix(1); }
 
-        if (prefijo.rfind("AUTO", 0) == 0) { r.etiqueta = "AUTO"; }
-        else if (prefijo.rfind("PRE-SYNC", 0) == 0) { r.etiqueta = "PRE-SYNC"; }
+        /* El nombre dice de quien es: «AUTO - sari - fecha», «PRE-SYNC - sari - fecha» o «sari - fecha».
+           Con varios usuarios en la consola, sin eso no se sabia de quien era cada respaldo. */
+        auto resto = [&prefijo](size_t desde) {
+            std::string_view u = prefijo.substr(std::min(desde, prefijo.size()));
+            while (!u.empty() && (u.front() == ' ' || u.front() == '-')) { u.remove_prefix(1); }
+            return std::string{u};
+        };
+        if (prefijo.rfind("AUTO", 0) == 0)
+        {
+            r.etiqueta = "AUTO";
+            r.usuario  = resto(4);
+        }
+        else if (prefijo.rfind("PRE-SYNC", 0) == 0)
+        {
+            r.etiqueta = "PRE-SYNC";
+            r.usuario  = resto(8);
+        }
         else if (prefijo.rfind("PARTIDA OQB", 0) == 0) { r.etiqueta = strings::tr("FULL SAVE", "PARTIDA"); }
-        else if (prefijo.empty() || prefijo == usuario) { r.etiqueta = strings::tr("MANUAL", "MANUAL"); }
-        else { r.etiqueta = std::string{prefijo}; }
+        else
+        {
+            r.etiqueta = strings::tr("MANUAL", "MANUAL");
+            r.usuario  = std::string{prefijo};
+        }
+        (void)usuario;
 
         // Hoy / Ayer / dd-mm-aaaa, mas la hora.
         const int anio = std::atoi(std::string{sello.substr(0, 4)}.c_str());
@@ -1044,7 +1064,18 @@ void BackupMenuState::render_lista(sdl::SharedTexture &target, bool hasFocus)
                 sdl::text::render(target, tx + 8, ey + 4, 14, sdl::text::NO_WRAP, borde, r.etiqueta);
                 tx += ew + 16;
             }
-            sdl::text::render(target, tx, fy + 15, 20, sdl::text::NO_WRAP, texto, cortar(r.fecha, 20, ANCHO_LISTA - tx - 120));
+            // De quien es: el usuario actual en su color, los demas en gris para no confundirlos.
+            const bool deOtro = !r.usuario.empty() && r.usuario != m_user->get_path_safe_nickname();
+            const sdl::Color colorFecha = deOtro && !elegida ? colors::DIALOG_LIGHT : texto;
+            const std::string fecha     = cortar(r.fecha, 20, ANCHO_LISTA - tx - 300);
+            sdl::text::render(target, tx, fy + 15, 20, sdl::text::NO_WRAP, colorFecha, fecha);
+            if (!r.usuario.empty())
+            {
+                const int fw            = sdl::text::get_width(20, fecha);
+                const std::string quien = stringutil::get_formatted_string(strings::tr("of %s", "de %s"), r.usuario.c_str());
+                sdl::text::render(target, tx + fw + 14, fy + 18, 16, sdl::text::NO_WRAP, deOtro ? colors::DIALOG_LIGHT : colors::BLUE_GREEN,
+                                  cortar(quien, 16, ANCHO_LISTA - tx - fw - 140));
+            }
         }
     }
 }
