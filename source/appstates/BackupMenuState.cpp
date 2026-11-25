@@ -792,6 +792,7 @@ void BackupMenuState::confirm_partida()
     }
     m_dataStruct->url  = partida.url;
     m_dataStruct->raiz = partida.raiz;
+    m_dataStruct->trucos = partida.trucos;
 
     // Siempre manteniendo A: reemplaza la partida de este usuario (queda respaldada antes).
     std::string query = stringutil::get_formatted_string(

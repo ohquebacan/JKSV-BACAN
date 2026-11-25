@@ -61,6 +61,9 @@ void partidas::cargar(sys::threadpool::JobData)
         json_object *autor = json_object_object_get(entrada, "autor");
         if (raiz) { partida.raiz = json_object_get_string(raiz); }
         if (autor) { partida.autor = json_object_get_string(autor); }
+        json_object *trucos = json_object_object_get(entrada, "trucos");
+        if (trucos && json_object_is_type(trucos, json_type_string)) { partida.trucos = json_object_get_string(trucos); }
+        if (partida.trucos.rfind("https://", 0) != 0) { partida.trucos.clear(); }
         if (!partida.raiz.empty() && partida.raiz.back() != '/') { partida.raiz += '/'; }
         if (partida.aplicacion == 0 || partida.url.rfind("https://", 0) != 0) { continue; }
         leidas.push_back(std::move(partida));

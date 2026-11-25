@@ -20,7 +20,10 @@
 #include "ui/PopMessageManager.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdio>
 #include <cstring>
+#include <strings.h>
 #include <string>
 #include <vector>
 
@@ -461,6 +464,75 @@ void tasks::backup::restore_backup_local(sys::threadpool::JobData taskData)
     task->complete();
 }
 
+// Lo que una partida no puede guardar (en CTR, lo de la Pit Stop se desbloquea con cheats cada vez que abre el
+// juego): un zip con <BID>.txt que va a /atmosphere/contents/<juego>/cheats/. Solo se escriben archivos con
+// nombre de build id; cualquier otra cosa del zip se ignora. Devuelve cuantos se instalaron.
+static int instalar_trucos(const std::string &url, uint64_t aplicacion)
+{
+    std::string datos{};
+    {
+        curl::Handle handle = curl::new_handle();
+        curl::prepare_get(handle);
+        curl::set_option(handle, CURLOPT_URL, url.c_str());
+        curl::set_option(handle, CURLOPT_WRITEFUNCTION, curl::write_response_string);
+        curl::set_option(handle, CURLOPT_WRITEDATA, &datos);
+        curl::set_option(handle, CURLOPT_FOLLOWLOCATION, 1L);
+        if (!curl::perform(handle) || curl::get_response_code(handle) != 200 || datos.empty())
+        {
+            logger::log("trucos: no se pudieron bajar (http %li)", curl::get_response_code(handle));
+            return 0;
+        }
+    }
+
+    struct archive *lector = archive_read_new();
+    archive_read_support_format_zip(lector);
+    if (archive_read_open_memory(lector, datos.data(), datos.size()) != ARCHIVE_OK)
+    {
+        archive_read_free(lector);
+        return 0;
+    }
+
+    char carpeta[0x60]{};
+    std::snprintf(carpeta, sizeof(carpeta), "sdmc:/atmosphere/contents/%016lX/cheats/", aplicacion);
+    error::fslib(fslib::create_directories_recursively(fslib::Path{carpeta}));
+
+    int instalados = 0;
+    struct archive_entry *entrada{};
+    std::vector<char> bufer(0x4000);
+    while (archive_read_next_header(lector, &entrada) == ARCHIVE_OK)
+    {
+        if (archive_entry_filetype(entrada) != AE_IFREG || !archive_entry_pathname(entrada)) { continue; }
+        std::string nombre{archive_entry_pathname(entrada)};
+        const size_t barra = nombre.find_last_of("/\\");
+        if (barra != nombre.npos) { nombre.erase(0, barra + 1); }
+        // Solo <16 hex>.txt (los trucos de una version del juego) y toggles.txt (cuales van encendidos: el pack
+        // de OQB arranca con los trucos apagados, dmnt_cheats_enabled_by_default = 0).
+        const bool toggles = strcasecmp(nombre.c_str(), "toggles.txt") == 0;
+        bool valido        = toggles || (nombre.size() == 20 && strcasecmp(nombre.c_str() + 16, ".txt") == 0);
+        for (size_t i = 0; valido && !toggles && i < 16; i++) { valido = std::isxdigit(static_cast<unsigned char>(nombre[i])); }
+        if (!valido || archive_entry_size(entrada) > 0x100000) { continue; }
+        if (toggles) { nombre = "toggles.txt"; }
+        else { std::transform(nombre.begin(), nombre.begin() + 16, nombre.begin(), ::toupper); }
+
+        const std::string destino = std::string{carpeta} + nombre;
+        std::FILE *archivo        = std::fopen(destino.c_str(), "wb");
+        if (!archivo) { continue; }
+        bool bien = true;
+        la_ssize_t leido{};
+        while ((leido = archive_read_data(lector, bufer.data(), bufer.size())) > 0)
+        {
+            if (std::fwrite(bufer.data(), 1, leido, archivo) != static_cast<size_t>(leido)) { bien = false; }
+        }
+        if (leido < 0) { bien = false; }
+        std::fclose(archivo);
+        if (bien) { ++instalados; }
+        else { std::remove(destino.c_str()); }
+    }
+    archive_read_free(lector);
+    logger::log("trucos: %d archivo(s) en %s", instalados, carpeta);
+    return instalados;
+}
+
 // Pasa una partida bajada (zip, 7z o rar, en memoria) a un zip normal de JKSV: solo lo que esta dentro de
 // `raiz`, sin esa carpeta. Asi la restauracion es la de cualquier respaldo, meta incluido si lo trae.
 // Devuelve cuantos archivos quedaron (0 = no se pudo leer o no habia nada en esa carpeta).
@@ -630,6 +702,20 @@ void tasks::backup::restore_partida(sys::threadpool::JobData taskData)
     {
         castData->path = zipPath;
         auto_backup(task, castData);
+    }
+
+    // 3b) Los trucos que acompanan a la partida (lo que el juego no guarda). Atmosphere los activa al abrir el
+    //      juego, asi que no hace falta pasar por EdiZon.
+    if (!castData->trucos.empty())
+    {
+        task->set_status(strings::tr("Installing the cheats for this save...", "Instalando los trucos de esta partida..."));
+        const int trucos = instalar_trucos(castData->trucos, titleInfo->get_application_id());
+        ui::PopMessageManager::push_message(POP_TICKS * 2,
+                                            trucos > 0
+                                                ? strings::tr("The save's cheats were installed: they turn on when you open the game.",
+                                                              "Se instalaron los trucos de la partida: se activan al abrir el juego.")
+                                                : strings::tr("Couldn't install the save's cheats. Probably no connection; the save is restored anyway.",
+                                                              "No se pudieron instalar los trucos de la partida. Es probable que no haya conexion; la partida se restaura igual."));
     }
 
     logger::log("partida: restaurando");

@@ -23,6 +23,7 @@ namespace partidas
         std::string url{};
         std::string raiz{};  // carpeta dentro del archivo que es la partida ("" = la raiz del archivo)
         std::string autor{}; // quien la hizo, para el credito al confirmar
+        std::string trucos{}; // zip con <BID>.txt: lo que la partida no guarda (se desbloquea con cheats)
     };
 
     /// @brief Descarga el catalogo una vez por sesion. Tarea del threadpool: se lanza al arrancar.
