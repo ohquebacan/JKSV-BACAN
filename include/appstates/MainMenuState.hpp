@@ -95,6 +95,11 @@ class MainMenuState final : public BaseState
         /// @brief Allows the check_for_update task to signal that an update was found (to prevent corrupted textures!)
         std::atomic_bool m_updateFound{};
 
+        /// @brief La invitacion a donar: si toca en esta apertura, sale unos segundos despues de abrir (si no salio antes el aviso de version nueva).
+        bool m_donarToca{};
+        bool m_avisoMostrado{};
+        int m_cuadros{};
+
         /// @brief Records the size of the sm_users vector.
         static inline int sm_userCount{};
 

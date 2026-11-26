@@ -15,6 +15,7 @@
 #include "appstates/TitleSelectCommon.hpp"
 #include "appstates/TitleSelectState.hpp"
 #include "appstates/UpdateNoticeState.hpp"
+#include "appstates/DonarState.hpp"
 #include "appstates/UserOptionState.hpp"
 #include "config/config.hpp"
 #include "data/data.hpp"
@@ -51,6 +52,13 @@ MainMenuState::MainMenuState()
     MainMenuState::initialize_view_states();
     MainMenuState::initialize_data_struct();
     MainMenuState::check_for_update();
+    // Una vez por arranque (el menu principal puede volver a armarse).
+    static bool donarRevisado = false;
+    if (!donarRevisado)
+    {
+        donarRevisado = true;
+        m_donarToca   = DonarState::toca();
+    }
 }
 
 //                      ---- Public functions ----
@@ -71,7 +79,14 @@ void MainMenuState::update()
     else if (m_updateFound.load())
     {
         m_updateFound.store(false);
+        m_avisoMostrado = true;
         MainMenuState::confirm_update();
+    }
+    // Una ventana emergente por vez: la invitacion a donar no sale si esta vez salio el aviso de version nueva.
+    else if (m_donarToca && hasFocus && ++m_cuadros > 150)
+    {
+        m_donarToca = false;
+        if (!m_avisoMostrado) { DonarState::create_push_fade(); }
     }
 
     m_mainMenu->update(hasFocus);
