@@ -1,3 +1,4 @@
+#include <map>
 #include <set>
 #include "tasks/backup.hpp"
 
@@ -536,7 +537,29 @@ static int instalar_trucos(const std::string &url, uint64_t aplicacion)
 // Pasa una partida bajada (zip, 7z o rar, en memoria) a un zip normal de JKSV: solo lo que esta dentro de
 // `raiz`, sin esa carpeta. Asi la restauracion es la de cualquier respaldo, meta incluido si lo trae.
 // Devuelve cuantos archivos quedaron (0 = no se pudo leer o no habia nada en esa carpeta).
-static int partida_a_zip(const std::string &datos, const std::string &raiz, const fslib::Path &zipPath, int64_t &bytes, bool &conMeta)
+// Los archivos `rutas` de la partida que hay ahora en la consola (los que existan): sus ajustes, para que la
+// partida descargada no cambie el idioma ni las opciones. Son archivos chicos; uno de mas de 1 MB no se toma.
+static std::map<std::string, std::string> leer_conservar(const FsSaveDataInfo *saveInfo, const std::vector<std::string> &rutas)
+{
+    std::map<std::string, std::string> leidos{};
+    if (rutas.empty()) { return leidos; }
+    auto scopedMount = create_scoped_mount(saveInfo);
+    for (const std::string &ruta : rutas)
+    {
+        fslib::File archivo{fslib::Path{std::string{fs::DEFAULT_SAVE_ROOT} + ruta}, FsOpenMode_Read};
+        if (!archivo.is_open()) { continue; }
+        const int64_t tam = archivo.get_size();
+        if (tam < 0 || tam > 0x100000) { continue; }
+        std::string datos(static_cast<size_t>(tam), '\0');
+        if (tam > 0 && archivo.read(datos.data(), static_cast<uint64_t>(tam)) != tam) { continue; }
+        leidos[ruta] = std::move(datos);
+    }
+    logger::log("partida: %zu de %zu archivo(s) de ajustes tomados de la partida actual", leidos.size(), rutas.size());
+    return leidos;
+}
+
+static int partida_a_zip(const std::string &datos, const std::string &raiz, const fslib::Path &zipPath, int64_t &bytes, bool &conMeta,
+                         const std::map<std::string, std::string> &propios)
 {
     // Solo los formatos de las partidas (zip, 7z, rar). format_all tambien activa xar, mtree, cab, warc y
     // otros que no hacen falta y que pueden pedir servicios que en el Album no estan.
@@ -562,6 +585,7 @@ static int partida_a_zip(const std::string &datos, const std::string &raiz, cons
     int archivos = 0;
     bool fallo   = false;
     std::set<std::string> carpetas{};
+    std::set<std::string> usados{}; // los de `propios` que ya se escribieron
     bytes        = 0;
     conMeta      = false;
     std::vector<char> bufer(0x10000);
@@ -600,14 +624,41 @@ static int partida_a_zip(const std::string &datos, const std::string &raiz, cons
         // open_new_file corta hasta la primera '/' (espera «save:/ruta»). Sin el '/' de adelante se comia la
         // primera carpeta: la partida de Smash quedaba fuera de save_data/ y el juego arrancaba limpio.
         if (!zip.open_new_file("/" + ruta)) { fallo = true; break; }
-        la_ssize_t leidos{};
-        while ((leidos = archive_read_data(lector, bufer.data(), bufer.size())) > 0)
+        const auto propio = propios.find(ruta);
+        if (propio != propios.end())
         {
-            if (!zip.write(bufer.data(), static_cast<size_t>(leidos))) { fallo = true; break; }
+            // El de la partida que ya tenias (idioma y opciones), en vez del descargado.
+            if (!propio->second.empty() && !zip.write(propio->second.data(), propio->second.size())) { fallo = true; }
+            usados.insert(ruta);
         }
-        if (leidos < 0) { fallo = true; }
+        else
+        {
+            la_ssize_t leidos{};
+            while ((leidos = archive_read_data(lector, bufer.data(), bufer.size())) > 0)
+            {
+                if (!zip.write(bufer.data(), static_cast<size_t>(leidos))) { fallo = true; break; }
+            }
+            if (leidos < 0) { fallo = true; }
+        }
         zip.close_current_file();
         if (!fallo) { ++archivos; }
+    }
+
+    // Los de la partida actual que la descargada no trae: tambien se quedan.
+    for (const auto &[ruta, contenido] : propios)
+    {
+        if (fallo || usados.count(ruta)) { continue; }
+        for (size_t barra = ruta.find('/'); barra != ruta.npos; barra = ruta.find('/', barra + 1))
+        {
+            const std::string carpeta = ruta.substr(0, barra + 1);
+            if (!carpetas.insert(carpeta).second) { continue; }
+            if (!zip.open_new_file("/" + carpeta)) { fallo = true; break; }
+            zip.close_current_file();
+        }
+        if (fallo || !zip.open_new_file("/" + ruta)) { fallo = true; break; }
+        if (!contenido.empty() && !zip.write(contenido.data(), contenido.size())) { fallo = true; }
+        zip.close_current_file();
+        bytes += contenido.size();
     }
 
     archive_read_free(lector);
@@ -659,7 +710,8 @@ void tasks::backup::restore_partida(sys::threadpool::JobData taskData)
     int64_t bytes{};
     bool conMeta{};
     logger::log("partida: abriendo el archivo (raiz \"%s\")", castData->raiz.c_str());
-    const int archivos        = partida_a_zip(contenido, castData->raiz, zipPath, bytes, conMeta);
+    const std::map<std::string, std::string> propios = leer_conservar(saveInfo, castData->conservar);
+    const int archivos        = partida_a_zip(contenido, castData->raiz, zipPath, bytes, conMeta, propios);
     logger::log("partida: %d archivos, %lld bytes, meta %d", archivos, static_cast<long long>(bytes), conMeta ? 1 : 0);
     contenido.clear();
     contenido.shrink_to_fit();

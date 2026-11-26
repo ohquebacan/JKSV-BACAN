@@ -107,6 +107,7 @@ class BackupMenuState final : public BaseState
             std::string url{};  // partida completa a descargar
             std::string raiz{}; // carpeta de la partida dentro del archivo
             std::string trucos{}; // zip de cheats que acompana a la partida ("" = ninguno)
+            std::vector<std::string> conservar{}; // archivos de la partida actual que se quedan
         };
         // clang-format on
 

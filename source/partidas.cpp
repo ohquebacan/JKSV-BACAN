@@ -64,6 +64,20 @@ void partidas::cargar(sys::threadpool::JobData)
         json_object *trucos = json_object_object_get(entrada, "trucos");
         if (trucos && json_object_is_type(trucos, json_type_string)) { partida.trucos = json_object_get_string(trucos); }
         if (partida.trucos.rfind("https://", 0) != 0) { partida.trucos.clear(); }
+        // Archivos de ajustes (idioma, opciones) que se toman de la partida que ya tienes, no de la descargada.
+        json_object *conservar = json_object_object_get(entrada, "conservar");
+        if (conservar && json_object_is_type(conservar, json_type_array))
+        {
+            for (size_t k = 0; k < json_object_array_length(conservar); k++)
+            {
+                json_object *r = json_object_array_get_idx(conservar, k);
+                if (!r || !json_object_is_type(r, json_type_string)) { continue; }
+                std::string ruta = json_object_get_string(r);
+                while (!ruta.empty() && ruta.front() == '/') { ruta.erase(0, 1); }
+                if (ruta.empty() || ruta.find("..") != ruta.npos) { continue; }
+                partida.conservar.push_back(ruta);
+            }
+        }
         if (!partida.raiz.empty() && partida.raiz.back() != '/') { partida.raiz += '/'; }
         if (partida.aplicacion == 0 || partida.url.rfind("https://", 0) != 0) { continue; }
         leidas.push_back(std::move(partida));
