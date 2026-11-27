@@ -145,9 +145,7 @@ namespace
         remote::Storage *remote = remote::get_remote_storage();
         if (!remote)
         {
-            const std::string motivo = remote::motivo_webdav();
-            r.error = !motivo.empty() && nube::hay_configuracion() ? motivo
-                    : nube::hay_configuracion()
+            r.error = nube::hay_configuracion()
                           ? strings::tr("Couldn't sign in to your cloud. Most likely the app password or the address changed; check them in Connect or change cloud.",
                                         "No se pudo entrar a tu nube. Lo más probable es que la contraseña de aplicación o la dirección hayan cambiado; revísalas en Conectar o cambiar de nube.")
                           : strings::tr("No cloud set up yet.", "Todavía no hay una nube configurada.");

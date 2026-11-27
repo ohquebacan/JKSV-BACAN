@@ -1,4 +1,3 @@
-#include <atomic>
 #include "remote/remote.hpp"
 
 #include "StateManager.hpp"
@@ -103,9 +102,8 @@ void initialize_webdav()
     }
     else
     {
-        const std::string motivo = remote::motivo_webdav();
         const char *popDavFailed = strings::get_by_name(strings::names::WEBDAV, 1);
-        ui::PopMessageManager::push_message(popTicks, motivo.empty() ? std::string(popDavFailed) : motivo);
+        ui::PopMessageManager::push_message(popTicks, popDavFailed);
     }
 }
 
@@ -171,39 +169,4 @@ static void drive_set_jksv_root(remote::GoogleDrive *drive)
 
     drive->set_root_directory(jksvDir);
     drive->change_directory(jksvDir);
-}
-
-namespace
-{
-    std::atomic<long> s_codigoWebDav{-1};
-}
-
-long remote::ultimo_codigo_webdav() noexcept { return s_codigoWebDav.load(); }
-void remote::anotar_codigo_webdav(long codigo) noexcept { s_codigoWebDav = codigo; }
-
-std::string remote::motivo_webdav()
-{
-    // Errores con la causa probable y cuando descartarla, nunca con certeza.
-    const long c = s_codigoWebDav.load();
-    if (c == 401 || c == 403)
-    {
-        return strings::tr("Your cloud rejected the username or password. Check that the username is your account email and that the password is the one generated for apps in your cloud's settings (in Koofr: Preferences › Password › App passwords), not your account password.",
-                           "Tu nube rechazó el usuario o la clave. Revisa que el usuario sea el correo de tu cuenta y que la clave sea la generada para aplicaciones en los ajustes de tu nube (en Koofr: Preferencias › Contraseña › Contraseñas de aplicaciones), no la clave de tu cuenta.");
-    }
-    if (c == 404 || c == 409)
-    {
-        return strings::tr("Your cloud says that address or folder doesn't exist. Most likely the address or the folder is mistyped; rule it out if it matches what your service shows for WebDAV.",
-                           "Tu nube dice que esa dirección o carpeta no existe. Lo más probable es que la dirección o la carpeta estén mal escritas; descártalo si coincide con lo que tu servicio muestra para WebDAV.");
-    }
-    if (c == 0)
-    {
-        return strings::tr("Your cloud didn't answer. Most likely the address is mistyped or the service is down; rule it out if the site opens on another device.",
-                           "Tu nube no respondió. Lo más probable es que la dirección esté mal escrita o que el servicio esté caído; descártalo si la página abre en otro equipo.");
-    }
-    if (c >= 500)
-    {
-        return strings::tr("Your cloud had an internal error. Most likely it's temporary on their side; try again in a few minutes.",
-                           "Tu nube tuvo un error interno. Lo más probable es que sea algo pasajero de su lado; prueba de nuevo en unos minutos.");
-    }
-    return {};
 }
