@@ -75,7 +75,14 @@ remote::WebDav::WebDav()
 
     // This'll recursively get the full listing of the basepath for the WebDav server.
     std::string xml{};
-    const bool propFind     = WebDav::prop_find(url, xml);
+    bool propFind = WebDav::prop_find(url, xml);
+    // La carpeta base (JKSV) todavia no existe en el servidor: se crea y se vuelve a leer. Antes habia que
+    // crearla a mano en la nube, si no la conexion fallaba aunque el usuario y la clave fueran correctos.
+    if (propFind && curl::get_response_code(m_curl) == 404 && WebDav::crear_base())
+    {
+        xml.clear();
+        propFind = WebDav::prop_find(url, xml);
+    }
     const bool xmlProcessed = propFind && WebDav::process_listing(xml);
     if (!propFind || !xmlProcessed) { return; }
 
@@ -363,6 +370,38 @@ bool remote::WebDav::rename_item(remote::Item *item, std::string_view newName)
 }
 
 //                      ---- Private functions ----
+
+bool remote::WebDav::crear_base()
+{
+    // Cada tramo de la ruta base, de arriba hacia abajo (MKCOL no crea los intermedios).
+    std::string tramo{"/"};
+    size_t inicio = 0;
+    bool algo     = false;
+    while (inicio < m_root.size())
+    {
+        size_t fin = m_root.find('/', inicio);
+        if (fin == std::string::npos) { fin = m_root.size(); }
+        const std::string parte = m_root.substr(inicio, fin - inicio);
+        inicio                  = fin + 1;
+        if (parte.empty()) { continue; }
+        tramo += parte + "/";
+
+        remote::URL url{m_origin};
+        url.append_path(tramo);
+        curl::reset_handle(m_curl);
+        WebDav::append_credentials();
+        curl::set_option(m_curl, CURLOPT_URL, url.get());
+        curl::set_option(m_curl, CURLOPT_CUSTOMREQUEST, "MKCOL");
+        if (!curl::perform(m_curl)) { return false; }
+        const long code = curl::get_response_code(m_curl);
+        // 201 creada; 405/301 ya existia. Los tramos del servicio (dav/Koofr, remote.php/dav/files/usuario)
+        // pueden responder cualquier cosa (no se pueden crear): solo cuenta la ultima, la de JKSV.
+        algo = code == 201 || code == 405 || code == 301;
+    }
+    if (algo) { logger::log("WebDav: base folder %s ready.", m_root.c_str()); }
+    else { logger::log("Error creating WebDav base folder %s", m_root.c_str()); }
+    return algo;
+}
 
 void remote::WebDav::append_credentials()
 {

@@ -62,6 +62,9 @@ namespace remote
             /// @brief Appends the username and password to a WebDav curl request.
             void append_credentials();
 
+        /// @brief Crea la carpeta base en el servidor (y las intermedias). True si quedo creada o ya existia.
+        bool crear_base();
+
             /// @brief Requests PROPFIND to the url passed.
             /// @param url URL to PROPFIND with.
             /// @param xml String to record XML response to.
