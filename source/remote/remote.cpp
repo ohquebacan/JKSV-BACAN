@@ -187,7 +187,8 @@ std::string remote::motivo_webdav()
     const long c = s_codigoWebDav.load();
     if (c == 401 || c == 403)
     {
-        return strings::tr("Your cloud rejected the username or password. Most likely it needs an app password (Koofr and Nextcloud ask for one, not your account password); rule it out if you already made one for JKSV.",
+        return strings::tr("Your cloud rejected the username or password. Check that the username is your account email and that the password is the one generated for apps in your cloud's settings (in Koofr: Preferences › Password › App passwords), not your account password.",
+                           "Tu nube rechazó el usuario o la clave. Revisa que el usuario sea el correo de tu cuenta y que la clave sea la generada para aplicaciones en los ajustes de tu nube (en Koofr: Preferencias › Contraseña › Contraseñas de aplicaciones), no la clave de tu cuenta."); rule it out if you already made one for JKSV.",
                            "Tu nube rechazó el usuario o la clave. Lo más probable es que pida una contraseña de aplicación (Koofr y Nextcloud la piden, no la de tu cuenta); descártalo si ya creaste una para JKSV.");
     }
     if (c == 404 || c == 409)
