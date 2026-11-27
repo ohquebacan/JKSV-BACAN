@@ -1,3 +1,4 @@
+#include <atomic>
 #include "remote/remote.hpp"
 
 #include "StateManager.hpp"
@@ -102,8 +103,9 @@ void initialize_webdav()
     }
     else
     {
+        const std::string motivo = remote::motivo_webdav();
         const char *popDavFailed = strings::get_by_name(strings::names::WEBDAV, 1);
-        ui::PopMessageManager::push_message(popTicks, popDavFailed);
+        ui::PopMessageManager::push_message(popTicks, motivo.empty() ? std::string(popDavFailed) : motivo);
     }
 }
 
@@ -169,4 +171,39 @@ static void drive_set_jksv_root(remote::GoogleDrive *drive)
 
     drive->set_root_directory(jksvDir);
     drive->change_directory(jksvDir);
+}
+
+namespace
+{
+    std::atomic<long> s_codigoWebDav{-1};
+}
+
+long remote::ultimo_codigo_webdav() noexcept { return s_codigoWebDav.load(); }
+void remote::anotar_codigo_webdav(long codigo) noexcept { s_codigoWebDav = codigo; }
+
+std::string remote::motivo_webdav()
+{
+    // Errores con la causa probable y cuando descartarla, nunca con certeza.
+    const long c = s_codigoWebDav.load();
+    if (c == 401 || c == 403)
+    {
+        return strings::tr("Your cloud rejected the username or password. Most likely it needs an app password (Koofr and Nextcloud ask for one, not your account password); rule it out if you already made one for JKSV.",
+                           "Tu nube rechazó el usuario o la clave. Lo más probable es que pida una contraseña de aplicación (Koofr y Nextcloud la piden, no la de tu cuenta); descártalo si ya creaste una para JKSV.");
+    }
+    if (c == 404 || c == 409)
+    {
+        return strings::tr("Your cloud says that address or folder doesn't exist. Most likely the address or the folder is mistyped; rule it out if it matches what your service shows for WebDAV.",
+                           "Tu nube dice que esa dirección o carpeta no existe. Lo más probable es que la dirección o la carpeta estén mal escritas; descártalo si coincide con lo que tu servicio muestra para WebDAV.");
+    }
+    if (c == 0)
+    {
+        return strings::tr("Your cloud didn't answer. Most likely the address is mistyped or the service is down; rule it out if the site opens on another device.",
+                           "Tu nube no respondió. Lo más probable es que la dirección esté mal escrita o que el servicio esté caído; descártalo si la página abre en otro equipo.");
+    }
+    if (c >= 500)
+    {
+        return strings::tr("Your cloud had an internal error. Most likely it's temporary on their side; try again in a few minutes.",
+                           "Tu nube tuvo un error interno. Lo más probable es que sea algo pasajero de su lado; prueba de nuevo en unos minutos.");
+    }
+    return {};
 }

@@ -83,6 +83,8 @@ remote::WebDav::WebDav()
         xml.clear();
         propFind = WebDav::prop_find(url, xml);
     }
+    // Para decir por que no conecta (remote::motivo_webdav): 0 si el servidor ni respondio.
+    remote::anotar_codigo_webdav(propFind ? curl::get_response_code(m_curl) : 0);
     const bool xmlProcessed = propFind && WebDav::process_listing(xml);
     if (!propFind || !xmlProcessed) { return; }
 
